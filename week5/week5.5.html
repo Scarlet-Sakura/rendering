@@ -139,12 +139,12 @@
 
             switch i32((*hit).shader) {
                 case 0 { return directional_light(r, hit); }
-                case 1 { return lightByArea(r, hit); }
+                case 1 { return area_shade(r, hit); }
                 case default { return (*hit).color; }
 
         }
     }
-        fn lightByArea(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
+        fn area_shade(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
                 var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0.0);
                 var ray: Ray;
 
@@ -164,7 +164,7 @@
                    fragColor = (*hit).emission;
                 }
                 else{
-                   fragColor = (*hit).emission +  ((0.9*(*hit).diffuse)/3.14)*illumination;
+                   fragColor = (*hit).emission +  (((*hit).diffuse)/3.14)*illumination;
                 }
               return fragColor;
 
@@ -320,8 +320,8 @@
   <head>
     <title>Week 5.5</title>
     <script type="text/javascript" src="week5.5.js"></script>
-    <script type="text/javascript" src="common\MV.js"></script>
-    <script type="text/javascript" src="common\OBJParser.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
+    <script type="text/javascript" src="..\common\OBJParser.js"></script>
   </head>
 
   <body>

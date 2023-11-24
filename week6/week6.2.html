@@ -107,16 +107,15 @@
     }
 
     //find emission area
-    fn sample(r: ptr<function, Ray>, hit: ptr<function, HitInfo>,mLights: u32) -> Samples {
+    fn sample(mLights: u32) -> Samples {
         let face = indices[mLights];
 
         let u0 = attributes[face[0]].iPositions;
         let u1 = attributes[face[1]].iPositions;
         let u2 = attributes[face[2]].iPositions;
 
-        //let barycentric = calculateBarycentricCoordinates(u0,u1,u2,(*hit).position);
         var samples: Samples;
-        // Interpolate to get the point on the triangle
+      
         samples.sampledPoint = (u0 + u1 + u2)/3.0;
         samples.sampledArea =  0.5 * length(cross(u1 - u0, u2 - u0));
 
@@ -124,31 +123,30 @@
     }
 
     //shade based on area etc of the emissive triangles
-    fn chosen_area(r: ptr<function, Ray>, hit: ptr<function, HitInfo>,pos:vec3f)->Light{
+    fn chosen_area(pos:vec3f)->Light{
         var intensity = vec3f(0.0);
         var point = vec3f(0.0);
 
     //approximate the light with distributed set of points. each one with the Nth of the intensity of the base light
         for (var i: u32 = 0 ; i < arrayLength(&mLights); i++) {
-            point += sample(r,hit,mLights[i]).sampledPoint;
+            point += sample(mLights[i]).sampledPoint;
         }
         point /= f32(arrayLength(&mLights));
+        var light_direction = normalize(point - pos);
 
     //calculating the lighting contribution from each light source and sum the intensity
         for (var i: u32 = 0 ; i < arrayLength(&mLights); i++) {
-            let area = sample(r,hit,mLights[i]).sampledArea;
+            let area = sample(mLights[i]).sampledArea;
             let emission = vColors[indices[mLights[i]][3]].emission;
 
             let face = indices[mLights[i]];
             let normals = normalize(attributes[face[0]].iNormals + attributes[face[1]].iNormals + attributes[face[2]].iNormals);
-            let direction = normalize(point - pos);
-            intensity += max((dot(-direction, normals)),0) * emission * area;
+            intensity += max((dot(-light_direction, normals)),0) * emission * area;
         }
 
-        let light_direction = normalize(point - pos);
         let distance = length(point - pos);
 
-        return Light(point,intensity, distance, light_direction);
+        return Light(point,intensity/pow(distance,2), distance, light_direction);
     }
 
     fn directional_light(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
@@ -168,20 +166,18 @@
         var light = chosen_area((*hit).position);
 
         (ray).direction = light.direction;
-        (ray).tmin = 10e-4;
-        (ray).tmax= light.lightDist - 10e-4;
+        (ray).tmin = 1e-2;
+        (ray).tmax= light.lightDist -1e-2;
         (ray).origin = ((*hit).position);
         var fragColor = vec3f(0.0);
 
-        var illumination = (light.intensity)*dot(normalize((*hit).normal),light.direction);
+        var illumination = (light.intensity)*max(0.0,dot(normalize((*hit).normal),light.direction));
         var res = intersect_scene(&ray,&shadow_hit);
-
-
          if(res){
            fragColor = (*hit).emission;
         }
         else{
-           fragColor = (*hit).emission +  ((0.9*(*hit).diffuse)/3.14)*illumination;
+           fragColor = (*hit).emission +  (((*hit).diffuse)/3.14)*illumination;
         }
       return fragColor;
 
@@ -212,7 +208,7 @@
         let q = vector * vec3<f32>(uv* camera_const,1.0);
         let w = normalize(q);
 
-        return Ray(eye_point, w, 0.0, 1.0);
+        return Ray(eye_point, w, 0.0, 1e20);
     }
                
 
@@ -257,12 +253,13 @@
             else {
                 (*hit).dist = t;
             }
+            (*hit).diffuse = vColors[indices[mIndex][3]].color;
+            (*hit).emission= vColors[indices[mIndex][3]].emission;
+            (*hit).color = vColors[indices[mIndex][3]].color + vColors[indices[mIndex][3]].emission;
             (*hit).position = r.origin + (*hit).dist* r.direction;
             (*hit).normal = normalize(interpolatedNormal);
-            (*hit).diffuse = vColors[indices[mIndex][3]].color;
-
-            (*hit).emission= vColors[indices[mIndex][3]].emission;
-            (*hit).color = vColors[indices[mIndex][3]].color + vColors[indices[mIndex][3]].emission;;
+            
+           
         }
 
         return res;
@@ -379,14 +376,13 @@
     }
 
     fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
-        (*hit).has_hit = false;
-        (*r).tmax = 1e32;
-
+ 
         if(intersect_min_max(r)){
             var res= intersection_trimesh(r,hit);
             if (res){
-            (*r).tmax = min((*hit).dist,(*r).tmax);
-            (*hit).has_hit = true;   
+                (*r).tmax = min((*hit).dist,(*r).tmax);
+                (*hit).shader =1.0;
+                (*hit).has_hit = true; 
             }
         }
 
@@ -400,7 +396,7 @@
         var result = vec3<f32>(0.0, 0.0, 0.0);
 
         let uv = vec2f(coords.x*0.5f, coords.y*0.5f);
-        var r = get_camera_ray(uv,3.5);
+        var r = get_camera_ray(uv,uniforms.camera_const);
 
         var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0.0);
             for (var i = 0; i < i32(uniforms.subdivs); i++) {
@@ -414,7 +410,7 @@
 
                     for (var k = 0; k < max_depth; k++) {
                         if (intersect_scene(&r, &hit)) {
-                            result += (*hit).color;
+                            result += (shade(&r,&hit));
                         }
                         else { result += bgcolor.rgb; break; }
                         if (hit.has_hit) { break; }
@@ -423,12 +419,12 @@
                 }
             }
         result /= f32(uniforms.subdivs * uniforms.subdivs);
-        return vec4f(pow(result, vec3f(1.0)), bgcolor.a); }
+        return vec4f(pow(result, vec3f(1.0/uniforms.camera_const)), bgcolor.a); }
   </script>
 
   <head>
     <title>Week 6.2</title>
-    <script type = "text/javascrip" src = "week6.2.js"></script>
+    <script type = "text/javascript" src = "week6.2.js"></script>
     <script type="text/javascript" src="..\common\MV.js"></script>
     <script type="text/javascript" src="..\common\OBJParser_interleaved.js"></script>
     <script type="text/javascript" src="..\common\BspTree_interleaved.js"></script>
