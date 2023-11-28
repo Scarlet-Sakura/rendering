@@ -32,8 +32,6 @@ async function main()
     },
     });
 
- // Create a render pass in a command buffer and submit it
- 
 
  const encoder = device.createCommandEncoder();
  const pass = encoder.beginRenderPass({
