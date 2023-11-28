@@ -7,7 +7,8 @@ var g_drawingInfo = null; // Info for drawing the 3D model with WebGL
 //changing camera constant & aspect ratio
 var camera_const = 1.0;
 var aspect_ratio = 1.0;
-var subdivs = 1;
+ // Initialize the subdivision level
+var subdivisionLevel = 1;
 var sphere_option = 1.0;
 var object_option = 1.0;
 var uniforms = new Float32Array([
@@ -15,7 +16,7 @@ var uniforms = new Float32Array([
   camera_const,
   sphere_option,
   object_option,
-  subdivs,
+  subdivisionLevel,
 ]);
 
 window.onload = function () {
@@ -198,8 +199,8 @@ async function main() {
       requestAnimationFrame(animate);
       return;
     }
-    uniforms[5] = subdivs;
-    compute_jitters(jitter, 1 / canvas.height, subdivs);
+    uniforms[4] = subdivisionLevel;
+    compute_jitters(jitter, 1 / canvas.height, subdivisionLevel);
 
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
     device.queue.writeBuffer(jitterBuffer, 0, jitter);
@@ -211,8 +212,7 @@ async function main() {
   const incrementButton = document.getElementById("incrementButton");
   const decrementButton = document.getElementById("decrementButton");
 
-  // Initialize the subdivision level
-  let subdivisionLevel = 1;
+ 
 
   // Update the subdivision level display
   function updateSubdivisionLevel() {
@@ -235,7 +235,7 @@ async function main() {
 
   // Event listener for the decrement button
   decrementButton.addEventListener("click", () => {
-    if (subdivisionLevel >= 1) {
+    if (subdivisionLevel > 1) {
       subdivisionLevel--;
       updateSubdivisionLevel();
       // Call a function to update jitter vectors and perform ray tracing with the new level.
