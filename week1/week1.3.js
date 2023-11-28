@@ -1,5 +1,5 @@
 "use strict";
-//change to 1, -1 for third ex
+
 window.onload = function () { main(); }
 async function main()
 {
