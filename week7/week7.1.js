@@ -10,7 +10,7 @@ var width = 512;
 var height = 512;
 var frame = 0.0;
  // Initialize the subdivision level
- var subdivisionLevel = 1;
+var subdivisionLevel = 1;
 var uniforms = new Float32Array([width, height, camera_const, frame,subdivisionLevel]);
 
 window.onload = function () {
@@ -237,7 +237,7 @@ async function main() {
   // Event listener for the increment button
   incrementButton.addEventListener("click", () => {
     if (subdivisionLevel < 10) {
-      subdivisionLevel++; // You can adjust the maximum level if needed.
+      subdivisionLevel++; 
       updateSubdivisionLevel();
       // Call a function to update jitter vectors and perform ray tracing with the new level.
     }

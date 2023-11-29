@@ -197,7 +197,7 @@
 
     fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f{
 
-        switch  (*hit).shader {
+        switch (*hit).shader {
             
             case 0 { return directional_light(r, hit); }
             case 1 { return area_shade(r, hit); }
@@ -206,8 +206,8 @@
     }
 
     fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
-        const eye_point = vec3<f32>(-0.02, 0.11, 0.2);
-        const camera_pos = vec3<f32>(-0.02, 0.11, 0.0);
+        const eye_point = vec3<f32>(277.0, 275.0, -570.0);
+        const camera_pos = vec3<f32>(277.0, 275.0, 0.0);
         const up_vector = vec3<f32>(0.0, 1.0, 0.0);
 
         let v = normalize(camera_pos - eye_point);
@@ -218,7 +218,7 @@
         let q = vector * vec3<f32>(uv* camera_const,1.0);
         let w = normalize(q);
 
-        return Ray(eye_point, w, 0.0, 1.0);
+        return Ray(eye_point, w, 0.0, 1e20);
         }
 
 
@@ -477,8 +477,8 @@
         return fsOut;}
   </script>
   <head>
-    <title>Week 7</title>
-    <script type="text/javascript" src="week7.js"></script>
+    <title>Week 7.1</title>
+    <script type="text/javascript" src="week7.1.js"></script>
     <script type="text/javascript" src="..\common\MV.js"></script>
     <script type="text/javascript" src="..\common\OBJParser_interleaved.js"></script>
     <script type="text/javascript" src="..\common\BspTree_interleaved.js"></script>
