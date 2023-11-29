@@ -1,15 +1,17 @@
 "use strict";
-var obj_filename = "objects/CornellBoxWithBlocks.obj";
+var obj_filename = "../objects/CornellBoxWithBlocks.obj";
 
 var g_objDoc = null; // Info parsed from OBJ file
 var g_drawingInfo = null; // Info for drawing the 3D model with WebGL
 
 //changing camera constant & aspect ratio
-var camera_const = 1.5;
+var camera_const = 1.0;
 var width = 512;
 var height = 512;
 var frame = 0.0;
-var uniforms = new Float32Array([width, height, camera_const, frame]);
+ // Initialize the subdivision level
+ var subdivisionLevel = 1;
+var uniforms = new Float32Array([width, height, camera_const, frame,subdivisionLevel]);
 
 window.onload = function () {
   main();
@@ -59,9 +61,16 @@ async function main() {
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
+  
+  let jitter = new Float32Array(200);
+  const jitterBuffer = device.createBuffer({
+    size: jitter.byteLength,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+  });
+
+
   const buffers = {
-    positions: null,
-    normals: null,
+    attribs: null,
     colors: null,
     indices: null, //for positions
     treeIds: null,
@@ -69,6 +78,7 @@ async function main() {
     bspPlanes: null,
     aabb: null,
   };
+
   let textures = new Object();
   textures.width = canvas.width;
   textures.height = canvas.height;
@@ -90,6 +100,10 @@ async function main() {
         resource: { buffer: uniformBuffer },
       },
       { binding: 1, resource: textures.renderDst.createView() },
+      { 
+        binding:2, 
+        resource: { buffer: jitterBuffer }
+      },
     ],
   });
 
@@ -136,17 +150,48 @@ async function main() {
     console.log(buffers);
     console.log(buffers.normals);
 
+    const materials = [];
+
+    for (const materialInfo of g_drawingInfo.materials) {
+      // Extract the relevant properties from each materialInfo object
+      materials.push(
+        materialInfo.color.r,
+        materialInfo.color.g,
+        materialInfo.color.b,
+        1.0
+      );
+      materials.push(
+        materialInfo.emission.r,
+        materialInfo.emission.g,
+        materialInfo.emission.b,
+        1.0
+      );
+    }
+
+    const materialsBuffer = device.createBuffer({
+      size: Float32Array.BYTES_PER_ELEMENT * materials.length,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+    });
+    device.queue.writeBuffer(materialsBuffer, 0, new Float32Array(materials));
+
+    const lightBuffer = device.createBuffer({
+      size: g_drawingInfo.light_indices.byteLength,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+    });
+    device.queue.writeBuffer(lightBuffer, 0, g_drawingInfo.light_indices);
+
     // create bind Group
     const bindGroup = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: { buffer: buffers.normals } },
+        { binding: 0, resource: { buffer: materialsBuffer } },
         { binding: 1, resource: { buffer: buffers.indices } },
         { binding: 2, resource: { buffer: buffers.aabb } },
-        { binding: 3, resource: { buffer: buffers.positions } },
-        { binding: 4, resource: { buffer: buffers.treeIds } },
-        { binding: 5, resource: { buffer: buffers.bspTree } },
-        { binding: 6, resource: { buffer: buffers.bspPlanes } },
+        { binding: 3, resource: { buffer: buffers.treeIds } },
+        { binding: 4, resource: { buffer: buffers.bspTree } },
+        { binding: 5, resource: { buffer: buffers.bspPlanes } },
+        { binding: 6, resource: { buffer: buffers.attribs } },
+        { binding: 7, resource: { buffer: lightBuffer } },
       ],
     });
 
@@ -163,13 +208,66 @@ async function main() {
       requestAnimationFrame(animate);
       return;
     }
+    uniforms[4] = subdivisionLevel;
+    compute_jitters(jitter, 1 / canvas.height, subdivisionLevel);
 
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    device.queue.writeBuffer(jitterBuffer, 0, jitter);
 
     render(device, context, pipeline, bindGroup, bindGroupBuffers);
   }
   //initiate animate
   animate();
+  const subdivisionLevelElement = document.getElementById("subdivisionLevel");
+  const incrementButton = document.getElementById("incrementButton");
+  const decrementButton = document.getElementById("decrementButton");
+
+ 
+
+  // Update the subdivision level display
+  function updateSubdivisionLevel() {
+    subdivisionLevelElement.textContent = subdivisionLevel;
+    const numericValue = parseInt(subdivisionLevelElement.textContent, 10); // Use parseInt to parse as an integer
+
+    console.log(numericValue); // This will log the number 42
+
+    requestAnimationFrame(animate);
+  }
+
+  // Event listener for the increment button
+  incrementButton.addEventListener("click", () => {
+    if (subdivisionLevel < 10) {
+      subdivisionLevel++; // You can adjust the maximum level if needed.
+      updateSubdivisionLevel();
+      // Call a function to update jitter vectors and perform ray tracing with the new level.
+    }
+  });
+
+  // Event listener for the decrement button
+  decrementButton.addEventListener("click", () => {
+    if (subdivisionLevel > 1) {
+      subdivisionLevel--;
+      updateSubdivisionLevel();
+      // Call a function to update jitter vectors and perform ray tracing with the new level.
+    }
+  });
+
+  updateSubdivisionLevel();
+
+  function compute_jitters(jitter, pixelsize, subdivs) {
+    const step = pixelsize / subdivs;
+    if (subdivs < 2) {
+      jitter[0] = 0.0;
+      jitter[1] = 0.0;
+    } else {
+      for (var i = 0; i < subdivs; ++i)
+        for (var j = 0; j < subdivs; ++j) {
+          const idx = (i * subdivs + j) * 2;
+          jitter[idx] = (Math.random() + j) * step - pixelsize * 0.5;
+          jitter[idx + 1] = (Math.random() + i) * step - pixelsize * 0.5;
+        }
+    }
+  }
 
   async function render(device, context, pipeline, bindGroup, bindGroup2) {
     // Create a render pass in a command buffer and submit it
