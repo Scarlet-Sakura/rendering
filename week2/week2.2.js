@@ -51,10 +51,12 @@ async function main() {
     ],
   });
 
-  var shader = 0;
-  var camera_const = 1.5;
+  var camera_const = 1.0;
   var aspect_ratio = canvas.width / canvas.height;
-  var uniforms = new Float32Array([aspect_ratio, camera_const]);
+  var sphere = 0.0;
+  var matte = 0.0;
+  var uniforms = new Float32Array([aspect_ratio, camera_const, sphere,matte]);
+  
   device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
   document.getElementById("zoomSlider").addEventListener("input", (event) => {
@@ -67,58 +69,20 @@ async function main() {
     render(device, context, pipeline, bindGroup);
   }
   tick();
+ 
+sphereMenu.addEventListener("change",function(){
+    uniforms[2] = document.getElementById("sphereMenu").value;
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    render(device,context,pipeline,bindGroup);
+}
+)
 
-  const shaderMenu = document.getElementById("shaderMenu");
-  const materialMenu = document.getElementById("materialMenu");
-  const hitInfoData = new Float32Array([
-    0.0, // has_hit (bool as a float)
-    -1.0, // dist (f32)
-    0.0,
-    0.0,
-    0.0, // position (vec3<f32>)
-    0.0,
-    0.0,
-    0.0, // normal (vec3<f32>)
-    0.0,
-    0.0,
-    0.0, // color (vec3<f32>)
-    0.0, // shader (i32)
-    0.0, // depth (f32)
-    0.1, // specular (f32)
-    0.0, // sphere (i32)
-    0.0, //material (i32)
-  ]);
-  /*shaderMenu.addEventListener("change", () => {
-       // Get the selected shader value and update the scene shader accordingly
-       shader = parseInt(shaderMenu.value);
-       
-       requestAnimationFrame(select);});
-   function select(){
-      
-      hitInfoData[5]=shader;
-       console.log(hitInfoData[5]);
-         // Write the updated HitInfo data to the buffer
-       device.queue.writeBuffer(uniformBuffer, 0, hitInfoData);
-
-    // Call the render function to re-render the scene with the updated data
-        render(device, context, pipeline, bindGroup);}
-        select();*/
-  // You can update your scene shader here based on the selectedShader value
-  // For example, you can use a switch statement to select different shaders.
-
-  materialMenu.addEventListener("change", () => {
-    // Get the selected material value and update the scene material accordingly
-    const selectedMaterial = parseInt(materialMenu.value);
-    hitInfoData[8] = 0;
-
-    hitInfoData[9] = selectedMaterial;
-    console.log(hitInfoData[9]);
-    device.queue.writeBuffer(uniformBuffer, 0, hitInfoData);
-
-    // You can update your scene material here based on the selectedMaterial value
-    // For example, you can switch between different objects (sphere, plane, triangle).
-  });
-
+matteMenu.addEventListener("change",function(){
+    uniforms[3] = document.getElementById("matteMenu").value;
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    render(device,context,pipeline,bindGroup);
+}
+)
   function render(device, context, pipeline, bindGroup) {
     // Create a render pass in a command buffer and submit it
     const encoder = device.createCommandEncoder();

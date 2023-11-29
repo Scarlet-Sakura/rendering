@@ -222,7 +222,7 @@
 
 
 
-             var illumination = max(0.0,dot((*hit).normal,light.direction))/ (distance * distance);
+             var illumination = max(0.0,dot((*hit).normal,light.direction))*light.intensity;
 
 
              var res = intersect_scene(&ray,&shadow_hit);
