@@ -1,139 +1,118 @@
 <!DOCTYPE html>
 <html>
   <script id="wgsl" type="x-shader">
-         @group(0) @binding(0) var my_sampler: sampler;
-         @group(0) @binding(1) var my_texture: texture_2d<f32>;
-
-         @group(0) @binding(3) var<storage,read> jitter: array<f32>;
-
-
-            struct Uniforms {
-                aspect_ratio: f32,
-                camera_const: f32,
-                sphere_option: f32,
-                object_option: f32,
-                texture_option: f32,
-                num_jitters: u32,
-
-            };
-
-            @group(0) @binding(2) var<uniform> uniforms : Uniforms;
-            struct VSOut {
-                @builtin(position) position: vec4f,
-                @location(0) coords : vec2f,
-                };
+    @group(0) @binding(0) var my_sampler: sampler;
+    @group(0) @binding(1) var my_texture: texture_2d<f32>;
+    @group(1) @binding(0) var<uniform> uniforms : Uniforms;
+    @group(1) @binding(1) var<storage,read> jitters: array<f32>;
 
 
-            @vertex
-            fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
-            {
+    struct Uniforms {
+        aspect_ratio: f32,
+        camera_const: f32,
+        sphere_option: f32,
+        object_option: f32,
+        texture_option: f32,
+        subdivs: f32,
+    };
 
-                const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
-                var vsOut: VSOut;
-                vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
-                vsOut.coords = pos[VertexIndex];
-                return vsOut;
-            }
-            struct HitInfo {
-                has_hit: bool,
-                dist: f32,
-                position: vec3<f32>,
-                normal: vec3<f32>,
-                color: vec3<f32>,
-                shader: i32 ,
-                depth: f32,
-                specular: f32,
-                sphere: i32,
-                material: i32,
-                refraction: f32,
-                flag: bool,
-                shininess: f32,
-                use_texture: bool,
-                texcoords: vec2<f32>,
-            };
-
-           struct Onb {
-             tangent: vec3f,
-             binormal: vec3f,
-             normal: vec3f,
-             };
+            
+    struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) coords : vec2f,
+    };
 
 
-           struct Ray {
-             origin: vec3<f32>,
-             direction: vec3<f32>,
-             tmin: f32,
-             tmax: f32,
-         };
+    @vertex
+    fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
+    {
+        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+        var vsOut: VSOut;
+        vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
+        vsOut.coords = pos[VertexIndex];
+        return vsOut;
+    }
 
-         struct Plane {
-             position: vec3<f32>,
-             normal: vec3<f32>,
-             color: vec3<f32>,
-         };
-         struct Sphere {
-             center: vec3<f32>,
-             radius: f32,
-             refractive_index: f32,
-             shininess: f32,
-             color: vec3<f32>,
-         };
+    struct HitInfo {
+        has_hit: bool,
+        dist: f32,
+        position: vec3<f32>,
+        normal: vec3<f32>,
+        color: vec3<f32>,
+        shader: i32 ,
+        depth: f32,
+        specular: f32,
+        sphere: i32,
+        material: i32,
+        refraction: f32,
+        flag: bool,
+        shininess: f32,
+        use_texture: bool,
+        texcoords: vec2<f32>,
+    };
 
-         struct Triangle {
-             vertex1: vec3<f32>,
-             vertex2: vec3<f32>,
-             vertex3: vec3<f32>,
-             color: vec3<f32>,
-         };
-
-
-         struct Light {
-             source: vec3f,
-             intensity: f32,
-             lightDist: f32,
-             direction: vec3f
-             };
-
-             fn sample_light(pos: vec3f) -> Light
-             {
-
-                 var intensity = 3.14;
-                 var source = vec3<f32>(0.0,1.0,0.0);
-                 var distance = length(source - pos);
-                 var dir =  normalize(source - pos );
-                 var light = Light(source,intensity/pow(distance,2),distance,dir);
+    struct Onb {
+        tangent: vec3f,
+        binormal: vec3f,
+        normal: vec3f,
+    };
 
 
-                 return light;
-             }
+    struct Ray {
+        origin: vec3<f32>,
+        direction: vec3<f32>,
+        tmin: f32,
+        tmax: f32,
+    };
+
+    struct Plane {
+        position: vec3<f32>,
+        normal: vec3<f32>,
+        color: vec3<f32>,
+    };
+    struct Sphere {
+        center: vec3<f32>,
+        radius: f32,
+        refractive_index: f32,
+        shininess: f32,
+        color: vec3<f32>,
+    };
+
+    struct Triangle {
+        vertex1: vec3<f32>,
+        vertex2: vec3<f32>,
+        vertex3: vec3<f32>,
+        color: vec3<f32>,
+    };
 
 
+    struct Light {
+        source: vec3f,
+        intensity: f32,
+        lightDist: f32,
+        direction: vec3f
+    };
+
+    fn sample_light(pos: vec3f) -> Light
+    {
+        var intensity = 3.14;
+        var source = vec3<f32>(0.0,1.0,0.0);
+        var distance = length(source - pos);
+        var dir =  normalize(source - pos );
+        var light = Light(source,intensity/pow(distance,2),distance,dir);
+
+        return light;
+    }
+
+    fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f{
 
 
-
-
-        fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f{
-
-
-            switch i32(uniforms.sphere_option) {
-                case 1 { return (*hit).color  ; }
-                case 2 { return lambertian(r, hit); }
-                case 3 {
-                    if ((*hit).shader ==1){
-                        return phong(r, hit);}
-
-                        else if ((*hit).shader ==0){
-                            if(uniforms.object_option == 1){
-                            return (*hit).color;}
-                            else{
-                            return lambertian(r,hit);}
-                        }
-                        return (*hit).color;
-                    }
-                case 4
-                {
-                    if ((*hit).shader ==1){
-                    return mirror(r, hit);}
+        switch i32(uniforms.sphere_option) {
+            case 1 { return (*hit).color  ; }
+            case 2 { return lambertian(r, hit); }
+            case 3 {
+                if ((*hit).shader ==1){
+                    return phong(r, hit);}
 
                     else if ((*hit).shader ==0){
                         if(uniforms.object_option == 1){
@@ -142,24 +121,25 @@
                         return lambertian(r,hit);}
                     }
                     return (*hit).color;
-
-
                 }
-                case 5 {
-                    if ((*hit).shader ==1){
-                        return refractive(r, hit);}
+            case 4
+            {
+                if ((*hit).shader ==1){
+                return mirror(r, hit);}
 
-                        else if ((*hit).shader ==0){
-                            if(uniforms.object_option == 1){
-                            return (*hit).color;}
-                            else{
-                            return lambertian(r,hit);}
-                        }
-                        return (*hit).color; }
+                else if ((*hit).shader ==0){
+                    if(uniforms.object_option == 1){
+                    return (*hit).color;}
+                    else{
+                    return lambertian(r,hit);}
+                }
+                return (*hit).color;
 
-                case 6 {
-                       if ((*hit).shader ==1){
-                    return glossy(r, hit);}
+
+            }
+            case 5 {
+                if ((*hit).shader ==1){
+                    return refractive(r, hit);}
 
                     else if ((*hit).shader ==0){
                         if(uniforms.object_option == 1){
@@ -167,397 +147,368 @@
                         else{
                         return lambertian(r,hit);}
                     }
-                    return (*hit).color;
-                 }
-                default:{
+                    return (*hit).color; }
 
-                    return (*hit).color;
-               }
+            case 6 {
+                    if ((*hit).shader ==1){
+                return glossy(r, hit);}
+
+                else if ((*hit).shader ==0){
+                    if(uniforms.object_option == 1){
+                    return (*hit).color;}
+                    else{
+                    return lambertian(r,hit);}
+                }
+                return (*hit).color;
+                }
+            default:{
+
+                return (*hit).color;
+            }
 
         }
     }
-        fn phong(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+    fn phong(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+        var light = sample_light((*hit).position);
 
+        (*r).tmin = 1e-4;
+        (*r).tmax = 1e4;
 
-            var light = sample_light((*hit).position);
+        var v = normalize((*r).origin - (*hit).position);
 
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e4;
+        var reflect = 2*(dot((*hit).normal,light.direction))*(*hit).normal - light.direction;
+        var h = normalize(light.direction+v);
+        var hdotn = dot(reflect,v);
 
-            var v = normalize((*r).origin - (*hit).position);
+        var specular = light.intensity*pow(max(0.0,hdotn),(*hit).shininess);
 
-            var reflect = 2*(dot((*hit).normal,light.direction))*(*hit).normal - light.direction;
-            var h = normalize(light.direction+v);
-            var hdotn = dot(reflect,v);
+        var fragColor =  vec3<f32>((*hit).specular*specular);
 
-            var specular = light.intensity*pow(max(0.0,hdotn),(*hit).shininess);
+        return fragColor; 
+    }
 
-            var fragColor =  vec3<f32>((*hit).specular*specular);
+    fn lambertian(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
+        var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), 1,0,0.1,0,0,1.5,false,42.0,false,vec2<f32>(0.0));
+        var ray: Ray;
+        var light = sample_light((*hit).position);
 
+        var distance = light.lightDist;
 
+        (ray).direction = light.direction;
+        (ray).tmin = 1e-4;
+        (ray).tmax= distance;
+        (ray).origin = ((*hit).position);
 
+        var fragColor = vec3f(0.0);
 
-            return fragColor; }
+        var illumination = max(0.0,dot((*hit).normal,light.direction))*light.intensity;
 
-        fn lambertian(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
+        var res = intersect_scene(&ray,&shadow_hit);
+        var ambient = vec3f(0.1*(*hit).color.rgb[0],0.1*(*hit).color.rgb[1],0.1*(*hit).color.rgb[2]);
+        var diffuse = vec3f(0.9*(*hit).color.rgb[0],0.9*(*hit).color.rgb[1],0.9*(*hit).color.rgb[2]);
 
+        if(res){
+        fragColor = ambient;
+        }
+        else{
+        fragColor =ambient + diffuse*illumination;
+        }
 
+        return fragColor;
 
-            var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), 1,0,0.1,0,0,1.5,false,42.0,false,vec2<f32>(0.0));
-             var ray: Ray;
-             var light = sample_light((*hit).position);
+    }
 
-             var distance = light.lightDist;
+    fn refractive(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
+        (*hit).has_hit = false;
 
-             (ray).direction = light.direction;
+        const sphere: Sphere = Sphere(vec3<f32>(0.0,0.5,0.0),0.3,1.5,42,vec3<f32>(0.0,0.0,0.0));
 
-             (ray).tmin = 1e-4;
+        var product = dot((*hit).normal,(*r).direction);
+        var h1 = 1.0;
+        var h2 = sphere.refractive_index;
 
-             (ray).tmax= distance;
+        if(product>0)
+        {  
+            h2 = 1.0;
+            h1 = sphere.refractive_index;
+            (*hit).normal = -(*hit).normal;
 
-             (ray).origin = ((*hit).position);
+        }
 
+        (*hit).refraction = h1/h2;
+        var refraction_dir = refract((*r).direction,(*hit).normal,(*hit).refraction);
 
-             var fragColor = vec3f(0.0);
+        var cos_theta = 1 - pow((*hit).refraction,2)*(1-pow(dot(-(*r).direction,(*hit).normal),2));
 
+        if(cos_theta<0){
+            return mirror(r,hit);
+        }
 
+        (*r).direction = refraction_dir;
+        (*r).tmin = 1e-4;
+        (*r).tmax = 1e4;
+        (*r).origin = (*hit).position;
 
-             var illumination = max(0.0,dot((*hit).normal,light.direction))*light.intensity;
+        var fragColor = vec3<f32>(0.0);
 
+        return fragColor;
+    }
 
-             var res = intersect_scene(&ray,&shadow_hit);
-             var ambient = vec3f(0.1*(*hit).color.rgb[0],0.1*(*hit).color.rgb[1],0.1*(*hit).color.rgb[2]);
-             var diffuse = vec3f(0.9*(*hit).color.rgb[0],0.9*(*hit).color.rgb[1],0.9*(*hit).color.rgb[2]);
+    fn glossy(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
+        return refractive(r,hit) + phong(r,hit);
+    }
 
+    fn mirror(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
+        var reflection = reflect((*r).direction,(*hit).normal);
 
-             if(res){
+        (*r).direction = normalize(reflection);
+        (*r).tmin = 1e-4;
+        (*r).tmax = 1e4;
+        (*r).origin = (*hit).position;
 
-                fragColor = ambient;
-             }
-             else{
+        (*hit).has_hit = false;
 
-                 fragColor =ambient + diffuse*illumination;}
+        var fragColor = vec3<f32>(0.0);
 
+        return fragColor;
 
 
-             return fragColor;
+    }
+    fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
+        const eye_point = vec3<f32>(2.0, 1.5, 2.0);
+        const camera_pos = vec3<f32>(0.0, 0.0, 0.0);
+        const up_vector = vec3<f32>(0.0, 1.0, 0.0);
 
-         }
+        let v = normalize(camera_pos - eye_point);
+        let b1 = normalize(cross(v, up_vector));
+        let b2 = cross(b1, v);
+        let vector = mat3x3<f32>(b1, b2, v);
 
-         fn refractive(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-            (*hit).has_hit = false;
+        let q = vector * vec3<f32>(uv* camera_const,1.0);
+        let w = normalize(q);
 
-            const sphere: Sphere = Sphere(vec3<f32>(0.0,0.5,0.0),0.3,1.5,42,vec3<f32>(0.0,0.0,0.0));
+        return Ray(eye_point, w, 0.0, 1.0e2);
+    }
 
 
-            var product = dot((*hit).normal,(*r).direction);
-            var h1 = 1.0;
-            var h2 = sphere.refractive_index;
+    fn intersect_triangle(r: Ray,hit: ptr<function, HitInfo>,v: array<vec3<f32>, 3>,) -> bool{
+        let u0 = v[0];
+        let u1 = v[1];
+        let u2 = v[2];
 
-            if(product>0)
-            {  h2 = 1.0;
-               h1 = sphere.refractive_index;
-               (*hit).normal = -(*hit).normal;
+        let e0 = u1 - u0;
+        let e1 = u2 - u0;
+        let n = cross(e0, e1);
+        let d = -dot(u0, n);
 
-                }
+        let t = dot(u0 - r.origin, n)/dot(n, r.direction);
 
+        var res = false;
 
-            (*hit).refraction = h1/h2;
-            var refraction_dir = refract((*r).direction,(*hit).normal,(*hit).refraction);
+        let n_tmp = cross(u0 - r.origin, r.direction);
+        let b = dot(n_tmp, e1) /dot(n, r.direction);
+        let g = -dot(n_tmp, e0) / dot(n, r.direction);
 
-            var cos_theta = 1 - pow((*hit).refraction,2)*(1-pow(dot(-(*r).direction,(*hit).normal),2));
+        if ((t < r.tmax) & (t > r.tmin)) {
 
-          if(cos_theta<0){
-              return mirror(r,hit);
-
-           }
-
-
-            (*r).direction = refraction_dir;
-
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e4;
-            (*r).origin = (*hit).position;
-
-            var fragColor = vec3<f32>(0.0);
-
-            return fragColor;
-         }
-
-         fn glossy(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-              return refractive(r,hit) + phong(r,hit);
-         }
-
-         fn mirror(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-
-
-            var reflection = reflect((*r).direction,(*hit).normal);
-
-            (*r).direction = normalize(reflection);
-
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e4;
-
-            (*r).origin = (*hit).position;
-
-            (*hit).has_hit = false;
-
-            var fragColor = vec3<f32>(0.0);
-
-
-            return fragColor;
-
-
-         }
-         fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
-             const eye_point = vec3<f32>(2.0, 1.5, 2.0);
-             const camera_pos = vec3<f32>(0.0, 0.0, 0.0);
-             const up_vector = vec3<f32>(0.0, 1.0, 0.0);
-
-             let v = normalize(camera_pos - eye_point);
-             let b1 = normalize(cross(v, up_vector));
-             let b2 = cross(b1, v);
-             let vector = mat3x3<f32>(b1, b2, v);
-
-             let q = vector * vec3<f32>(uv* camera_const,1.0);
-             let w = normalize(q);
-
-             return Ray(eye_point, w, 0.0, 1.0e2);
-         }
-
-
-         fn intersect_triangle(
-             r: Ray,
-             hit: ptr<function, HitInfo>,
-             v: array<vec3<f32>, 3>,
-         ) -> bool{
-
-             let u0 = v[0];
-             let u1 = v[1];
-             let u2 = v[2];
-
-             let e0 = u1 - u0;
-             let e1 = u2 - u0;
-             let n = cross(e0, e1);
-             let d = -dot(u0, n);
-
-             let t = dot(u0 - r.origin, n)/dot(n, r.direction);
-
-             var res = false;
-
-             let n_tmp = cross(u0 - r.origin, r.direction);
-             let b = dot(n_tmp, e1) /dot(n, r.direction);
-             let g = -dot(n_tmp, e0) / dot(n, r.direction);
-
-             if ((t < r.tmax) & (t > r.tmin)) {
-
-                 res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);
-             }
-             if (res)   {
-                 if ((*hit).dist > 0) {
-                     (*hit).dist = min((*hit).dist, t);
-                 }
-                 else {
-                     (*hit).dist = t;
-                 }
-                 let intersection_point = r.origin + (*hit).dist* r.direction;
-                 (*hit).position =intersection_point;
-                 (*hit).normal = n;
-             }
-             return res;
-
-         }
-         fn intersect_plane(r: Ray, hit:ptr<function,HitInfo>,position: vec3f, normal:vec3f)->bool{
-             let d = -dot(position, normal);
-             let t = -(dot(r.origin,normal) + d)/dot(normal,r.direction);
-
-             var res = (t < r.tmax) & (t > r.tmin);
-             if (res) {
-                 if ((*hit).dist > 0) {
-                     (*hit).dist = min((*hit).dist, t);
-                 }
-                 else {
-                     (*hit).dist = t;
-                 }
-                 let intersection_point = r.origin + (*hit).dist * r.direction;
-                 (*hit).position =intersection_point;
-                 (*hit).normal = normal;
-             }
-             return res;
-
-         }
-
-         fn intersect_sphere(r: Ray, hit: ptr<function,HitInfo>,center: vec3f,radius: f32)->bool{
-             var rc = r.origin - center; //normal
-             var c = dot(rc,rc) - (radius*radius);
-             var b = 2*dot(r.direction,rc);
-             var d = b*b/4 - c;
-             var t1 = -b/2 - sqrt(d);
-             var t2 = -b/2 + sqrt(d);
-
-             var res = (pow(b/2,2) - c >=0);
-
-             if (res) {
-                 var t = t1;
-
-                 if (t> r.tmax || t <r.tmin) {
-                     t = t2;
-                 }
-                 if ( t<r.tmax && t>r.tmin){
-                     (*hit).dist = t;
-                     let intersection_point = r.origin + (*hit).dist * r.direction;
-                     (*hit).position = intersection_point;
-                     (*hit).normal = normalize((*hit).position - center);
-                     return true;
-                     }
-
-             }
-                 return false;
-         }
-
-
-
-
-         fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool{
-                const sphere: Sphere = Sphere(vec3<f32>(0.0,0.5,0.0),0.3,1.5,42,vec3<f32>(0.0,0.0,0.0));
-                const plane: Plane = Plane(vec3<f32>(0.0,0.0,0.0),vec3<f32>(0.0,1.0,0.0),vec3<f32>(0.1, 0.7, 0.0));
-                const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
-
-                var triangle_vertices: array<vec3<f32>, 3>;
-                    triangle_vertices[0] = vec3<f32>(-0.2, 0.1, 0.9);
-                    triangle_vertices[1] = vec3<f32>(0.2, 0.1, 0.9);
-                    triangle_vertices[2] = vec3<f32>(-0.2, 0.1, -0.1);
-
-                let triangle: Triangle = Triangle(triangle_vertices[0],triangle_vertices[1],triangle_vertices[2],vec3<f32>(0.4,0.3,0.2));
-
-                var res = intersect_plane(*r,hit,plane.position,plane.normal);
-
-                if (res ){
-                    (*r).tmax = min((*hit).dist,(*r).tmax);
-                    (*hit).has_hit = true;
-                    (*hit).shader =0;
-
-                    if ((*r).tmax == (*hit).dist) {
-                        (*hit).color = plane.color;
-                    }
-
-                let intersection_to_origin = (*hit).position - plane.position;
-                var u = dot(intersection_to_origin, plane_onb.tangent);
-                var v = dot(intersection_to_origin, plane_onb.binormal);
-
-                let texture_scale = 0.2;
-                u *= texture_scale;
-                v *= texture_scale;
-
-                (*hit).texcoords = vec2<f32>(u,v);
-
-                    if (i32(uniforms.texture_option) == 1) {
-                        (*hit).use_texture = true;
-                      } else {
-                        (*hit).use_texture = false;
-                      }
-
-
-
-                }
-
-                res = intersect_sphere(*r,hit,sphere.center,sphere.radius);
-                if (res){
-                    (*r).tmax = min((*hit).dist,(*r).tmax);
-                    (*hit).has_hit = true;
-                    (*hit).specular = 0.1;
-                    (*hit).shader =1;
-                    if ((*r).tmax == (*hit).dist) {
-                        (*hit).color = sphere.color;
-                    }
-
-                }
-
-                res = intersect_triangle(*r,hit,triangle_vertices);
-
-                if (res ){
-                    (*r).tmax = min((*hit).dist,(*r).tmax);
-
-                    (*hit).sphere = 0;
-                    (*hit).has_hit = true;
-                    (*hit).shader = 0;
-                    if ((*r).tmax == (*hit).dist) {
-                        (*hit).color = triangle.color;
-                    }
-
-                }
-
-                return (*hit).has_hit;
-
-                }
-             @fragment
-             fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f
-             {
-                const max_depth = 10;
-                const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
-
-                var result = vec3<f32>(0.0, 0.0, 0.0);
-                var textured = vec3<f32>(0.0, 0.0, 0.0);
-                let uv = vec2f(coords.x * uniforms.aspect_ratio * 0.5f, coords.y * 0.5f);
-                var r = get_camera_ray(uv, uniforms.camera_const);
-
-                var hit: HitInfo = HitInfo(false, -1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), 1, 0, 0.1, 0, 0, 1.5, false, 42.0, false, vec2<f32>(0.0));
-
-                for (var i = 0u; i < u32(uniforms.num_jitters); i = i + 2u) {
-                    // Calculate sub-pixel jitter
-                    var jitter_offset = vec2(jitter[i], jitter[i]);
-
-                    // Cast rays through sub-pixels with jitter
-                    var jittered_uv = uv + jitter_offset;
-                    var jittered_ray = get_camera_ray(jittered_uv, uniforms.camera_const);
-
-                    for (var j = 0; j < max_depth; j++) {
-                        if (intersect_scene(&jittered_ray, &hit)) {
-                            if (hit.use_texture) {
-                                textured += shade(&jittered_ray, &hit);
-                            } else {
-                                result += shade(&jittered_ray, &hit);
-                            }
-                        } else {
-                            if (hit.use_texture) {
-                                textured += bgcolor.rgb;
-
-
-                            } else {
-
-                                result += bgcolor.rgb;
-                                break;
-                            }
-
-                        }
-                        if (hit.has_hit) {
-                            break;
-                        }
-                    }
-                    let texColor = textureSample(my_texture, my_sampler, hit.texcoords).rgb;
-                    result += textured * texColor;
-                }
-
-                // Divide the result by the number of sub-pixels
-                result /= f32(uniforms.num_jitters);
-
-
-
-                return vec4f(pow(result, vec3f(1.0 / uniforms.camera_const)), bgcolor.a);
+            res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);
+        }
+        if (res)   {
+            if ((*hit).dist > 0) {
+                (*hit).dist = min((*hit).dist, t);
             }
+            else {
+                (*hit).dist = t;
+            }
+            let intersection_point = r.origin + (*hit).dist* r.direction;
+            (*hit).position =intersection_point;
+            (*hit).normal = n;
+        }
+        return res;
+
+    }
+    fn intersect_plane(r: Ray, hit:ptr<function,HitInfo>,position: vec3f, normal:vec3f)->bool{
+        let d = -dot(position, normal);
+        let t = -(dot(r.origin,normal) + d)/dot(normal,r.direction);
+
+        var res = (t < r.tmax) & (t > r.tmin);
+        if (res) {
+            if ((*hit).dist > 0) {
+                (*hit).dist = min((*hit).dist, t);
+            }
+            else {
+                (*hit).dist = t;
+            }
+            let intersection_point = r.origin + (*hit).dist * r.direction;
+            (*hit).position =intersection_point;
+            (*hit).normal = normal;
+        }
+        return res;
+    }
+
+    fn intersect_sphere(r: Ray, hit: ptr<function,HitInfo>,center: vec3f,radius: f32)->bool{
+        var rc = r.origin - center; //normal
+        var c = dot(rc,rc) - (radius*radius);
+        var b = 2*dot(r.direction,rc);
+        var d = b*b/4 - c;
+        var t1 = -b/2 - sqrt(d);
+        var t2 = -b/2 + sqrt(d);
+
+        var res = (pow(b/2,2) - c >=0);
+
+        if (res) {
+            var t = t1;
+
+            if (t> r.tmax || t <r.tmin) {
+                t = t2;
+            }
+            if ( t<r.tmax && t>r.tmin){
+                (*hit).dist = t;
+                let intersection_point = r.origin + (*hit).dist * r.direction;
+                (*hit).position = intersection_point;
+                (*hit).normal = normalize((*hit).position - center);
+                return true;
+                }
+
+        }
+            return false;
+    }
+
+
+
+
+    fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool{
+        const sphere: Sphere = Sphere(vec3<f32>(0.0,0.5,0.0),0.3,1.5,42,vec3<f32>(0.0,0.0,0.0));
+        const plane: Plane = Plane(vec3<f32>(0.0,0.0,0.0),vec3<f32>(0.0,1.0,0.0),vec3<f32>(0.1, 0.7, 0.0));
+        const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
+
+        var triangle_vertices: array<vec3<f32>, 3>;
+            triangle_vertices[0] = vec3<f32>(-0.2, 0.1, 0.9);
+            triangle_vertices[1] = vec3<f32>(0.2, 0.1, 0.9);
+            triangle_vertices[2] = vec3<f32>(-0.2, 0.1, -0.1);
+
+        let triangle: Triangle = Triangle(triangle_vertices[0],triangle_vertices[1],triangle_vertices[2],vec3<f32>(0.4,0.3,0.2));
+
+        var res = intersect_plane(*r,hit,plane.position,plane.normal);
+        if (res ){
+            (*r).tmax = min((*hit).dist,(*r).tmax);
+            (*hit).has_hit = true;
+            (*hit).shader =0;
+
+            if ((*r).tmax == (*hit).dist) {
+                (*hit).color = plane.color;
+            }
+
+        let intersection_to_origin = (*hit).position - plane.position;
+        var u = dot(intersection_to_origin, plane_onb.tangent);
+        var v = dot(intersection_to_origin, plane_onb.binormal);
+
+        let texture_scale = 0.2;
+        u *= texture_scale;
+        v *= texture_scale;
+
+        (*hit).texcoords = vec2<f32>(u,v);
+
+            if (i32(uniforms.texture_option) == 1) {
+                (*hit).use_texture = true;
+                } else {
+                (*hit).use_texture = false;
+                }
+        }
+
+        res = intersect_sphere(*r,hit,sphere.center,sphere.radius);
+        if (res){
+            (*r).tmax = min((*hit).dist,(*r).tmax);
+            (*hit).has_hit = true;
+            (*hit).specular = 0.1;
+            (*hit).shader =1;
+            if ((*r).tmax == (*hit).dist) {
+                (*hit).color = sphere.color;
+            }
+
+        }
+
+        res = intersect_triangle(*r,hit,triangle_vertices);
+        if (res ){
+            (*r).tmax = min((*hit).dist,(*r).tmax);
+
+            (*hit).sphere = 0;
+            (*hit).has_hit = true;
+            (*hit).shader = 0;
+            if ((*r).tmax == (*hit).dist) {
+                (*hit).color = triangle.color;
+            }
+
+        }
+
+        return (*hit).has_hit;
+
+        }
+
+        @fragment
+        fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f{
+        const max_depth = 5;
+        const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
+
+        var result = vec3<f32>(0.0, 0.0, 0.0);
+        var textured = vec3<f32>(0.0, 0.0, 0.0);
+        let uv = vec2f(coords.x * uniforms.aspect_ratio * 0.5f, coords.y * 0.5f);
+        var r = get_camera_ray(uv, uniforms.camera_const);
+
+        var hit: HitInfo = HitInfo(false, -1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0), 1, 0, 0.1, 0, 0, 1.5, false, 42.0, false, vec2<f32>(0.0));
+
+        for (var i = 0; i < i32(uniforms.subdivs); i++) {
+            for (var j = 0; j < i32(uniforms.subdivs); j++) {
+
+                let idx = (i * i32(uniforms.subdivs) + j);
+                let jitter_vec = jitters[idx];
+                let subpixel_uv = jitter_vec + uv;
+                var jittered_ray = get_camera_ray(subpixel_uv, uniforms.camera_const);
+
+                for (var k = 0; k < max_depth; k++) {
+                if (intersect_scene(&jittered_ray, &hit)) {
+                    if (hit.use_texture) {
+                        textured += shade(&jittered_ray, &hit);
+                    } else {
+                        result += shade(&jittered_ray, &hit);
+                    }
+                } else {
+                    if (hit.use_texture) {
+                        textured += bgcolor.rgb;
+                        break;
+                    } else {
+                        result += bgcolor.rgb;
+                        break;
+                    }
+
+                }
+                if (hit.has_hit) {
+                    break;
+                }
+            }
+            let texColor = textureSample(my_texture, my_sampler, hit.texcoords).rgb;
+            result += textured * texColor;
+            }
+        }
+        
+        // Divide the result by the number of sub-pixels
+        result /= f32(uniforms.subdivs*uniforms.subdivs);
+        return vec4f(pow(result, vec3f(1.0 / uniforms.camera_const)), bgcolor.a);
+    }
   </script>
 
   <head>
     <title>Week 3</title>
     <script type="text/javascript" src="week3.js"></script>
-    <script type="text/javascript" src="common\MV.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
   </head>
 
   <body>
     <canvas id="webgpu-canvas" width="512" height="512">
       Please use a browser that supports HTML5 canvas.
     </canvas>
-
+    <br>
+    <p>Filtering Menu</p>
     <select id="addressMenu" size="2">
       <option value="0" selected>Clamp to edge</option>
       <option value="1">Repeat</option>
@@ -566,6 +517,7 @@
       <option value="0" selected>Nearest</option>
       <option value="1">Linear</option>
     </select>
+    <br>
     <label for="menu1">Shading Sphere</label>
     <select id="menu1">
       <option value="1">Base Color</option>
@@ -584,10 +536,12 @@
       <option value="2" selected>Lambertian</option>
     </select>
     <br />
-    <button id="Texture">Texture</button>
+    
+    <button id="Texture">Enable Texture</button>
     <br />
     <p>Current Subdivision Level: <span id="subdivisionLevel">1</span></p>
     <button id="incrementButton">Increment</button>
     <button id="decrementButton">Decrement</button>
+    <p>
   </body>
 </html>

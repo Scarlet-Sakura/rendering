@@ -232,6 +232,7 @@ async function main() {
 
    console.log(numericValue); // This will log the number 42
    compute_jitters(jitter, 1 / canvas.height, numericValue);
+   
  }
 
  // Event listener for the increment button
@@ -268,6 +269,7 @@ async function main() {
           jitter[idx + 1] = (Math.random() + i) * step - pixelsize * 0.5;
         }
     }
+
   }
 
   async function render(device, context, pipeline, bindGroup, bindGroup2) {

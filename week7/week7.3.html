@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+  <script id="wgsl" type="x-shader">
+
+    struct Aabb {
+        min: vec3f,
+        max: vec3f,
+        };
+
+    struct Uniforms {
+        width: f32,
+        height:f32,
+        camera_const: f32,
+        frame:f32,
+        subdivs: f32,
+    };
+
+    struct Attributes{
+        iPositions: vec3f,
+        iNormals: vec3f,
+    }
+
+    struct colors {
+        color: vec3f,
+        emission: vec3f,
+    }
+
+    struct Samples {
+        sampledPoint: vec3f,
+        sampledArea:f32,
+        normal: vec3f,
+    }
+
+    //make the triangle face an array of vec4u
+    //create an attrribute struct
+    @group(0) @binding(0) var<storage,read> vColors: array<colors>;
+    @group(0) @binding(1) var<storage,read> indices: array<vec4u>;
+    @group(0) @binding(2) var<uniform> aabb : Aabb;
+    @group(0) @binding(3) var<storage,read> iTrees: array<u32>;
+    @group(0) @binding(4) var<storage,read> bspTree: array<vec4u>;
+    @group(0) @binding(5) var<storage,read> bspPlanes: array<f32>;
+    @group(0) @binding(6) var<storage,read> attributes: array<Attributes>;
+    @group(0) @binding(7) var<storage,read> mLights: array<u32>;
+
+    @group(1) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var my_texture :texture_2d<f32>;
+    @group(1) @binding(2) var<storage,read> jitters: array<vec2f>;
+
+
+    const MAX_LEVEL = 20u;
+    const BSP_LEAF = 3u;
+    var<private> branch_node: array<vec2u, MAX_LEVEL>;
+    var<private> branch_ray: array<vec2f, MAX_LEVEL>;
+
+
+    struct FSOut {
+        @location(0) frame: vec4f,
+        @location(1) accum: vec4f,
+    };
+
+    struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) coords : vec2f,
+    };
+
+    @vertex
+    fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut{
+        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+        var vsOut: VSOut;
+        vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
+        vsOut.coords = pos[VertexIndex];
+        return vsOut;
+    }
+
+    struct HitInfo {
+        has_hit: bool,
+        dist: f32,
+        position: vec3<f32>,
+        normal: vec3<f32>,
+        color: vec3<f32>,
+        texcoords: vec2<f32>,
+        emission:vec3<f32>,
+        diffuse:vec3<f32>,
+        shader:i32,
+        refraction:f32,
+    };
+
+    struct Ray {
+        origin: vec3<f32>,
+        direction: vec3<f32>,
+        tmin: f32,
+        tmax: f32,
+    };
+
+
+    struct Light {
+        source: vec3f,
+        intensity: vec3f,
+        lightDist: f32,
+        direction: vec3f
+    };
+
+    struct Triangle {
+        vertex1: vec3<f32>,
+        vertex2: vec3<f32>,
+        vertex3: vec3<f32>,
+        color: vec3<f32>,
+    };
+
+    fn sample_light(pos: vec3f) -> Light
+    {
+        var intensity = vec3f(3.14);
+        var source = vec3<f32>(0.0,1.0,0.0);
+        var distance = length(source - pos);
+        var dir =  normalize(source - pos );
+        var light = Light(source,intensity/pow(distance,2),distance,dir);
+
+        return light;
+    }
+
+
+    //find emission area
+    fn sample(mLights: u32, seed: ptr<function,u32>) -> Samples {
+        let face = indices[mLights];
+
+        let u0 = attributes[face[0]].iPositions;
+        let u1 = attributes[face[1]].iPositions;
+        let u2 = attributes[face[2]].iPositions;
+
+        var ks1 = rnd(seed);
+        var ks2 = rnd(seed);
+        var alpha = 1 - sqrt(ks1);
+        var bita = (1 - ks2)*sqrt(ks1);
+        var gamma = ks2*sqrt(ks1);
+        let interpolatedNormal = alpha*attributes[face[0]].iNormals + bita*attributes[face[1]].iNormals + gamma*attributes[face[2]].iNormals;
+        var samples: Samples;
+        samples.normal = normalize(interpolatedNormal);
+        samples.sampledPoint = alpha*u0 + bita*u1 + gamma*u2;
+        samples.sampledArea =  0.5 * length(cross(u1 - u0, u2 - u0));
+
+        return samples;
+    }
+
+    //shade based on area random Monte Carlo method
+    fn random_area(pos: vec3f,seed:ptr<function,u32>)->Light{
+
+        var triangle_index =  u32(rnd(seed)*f32(arrayLength(&mLights)));
+        var point = sample(mLights[triangle_index],seed).sampledPoint;
+        var area = sample(mLights[triangle_index],seed).sampledArea;
+        var normals = sample(mLights[triangle_index],seed).normal;
+
+        var light_direction = normalize(point - pos);
+       
+        let emission = vColors[indices[mLights[triangle_index]][3]].emission;
+        let face = indices[mLights[triangle_index]];
+        let intensity = max((dot(-light_direction, normals)),0) * emission * area*f32(arrayLength(&mLights));
+
+        let distance = length(point - pos);
+
+        return Light(point,intensity/pow(distance,2), distance, light_direction);
+    
+    }
+
+    //shade based on area etc of the emissive triangles
+    /*fn chosen_area(pos:vec3f)->Light{
+        var intensity = vec3f(0.0);
+        var point = vec3f(0.0);
+
+    //approximate the light with distributed set of points. each one with the Nth of the intensity of the base light
+        for (var i: u32 = 0 ; i < arrayLength(&mLights); i++) {
+            point += sample(mLights[i]).sampledPoint;
+        }
+        point /= f32(arrayLength(&mLights));
+        var light_direction = normalize(point - pos);
+
+    //calculating the lighting contribution from each light source and sum the intensity
+        for (var i: u32 = 0 ; i < arrayLength(&mLights); i++) {
+            let area = sample(mLights[i]).sampledArea;
+            let emission = vColors[indices[mLights[i]][3]].emission;
+
+            let face = indices[mLights[i]];
+            let normals = normalize(attributes[face[0]].iNormals + attributes[face[1]].iNormals + attributes[face[2]].iNormals);
+            intensity += max((dot(-light_direction, normals)),0) * emission * area;
+        }
+
+        let distance = length(point - pos);
+
+        return Light(point,intensity/pow(distance,2), distance, light_direction);
+    }*/
+
+    fn directional_light(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+        let ambient = 0.1 * (*hit).color;
+        var intensity = 3.14;
+        var direction = normalize(vec3f(-1.0));
+        let l_r = ((*hit).color / intensity) * intensity * dot((*hit).normal, -direction);
+        let diffuse = 0.9 * l_r;
+
+        return ambient + diffuse;
+    }
+
+    fn area_shade(r: ptr<function, Ray>, hit:ptr<function,HitInfo>,seed: ptr<function,u32>)->vec3f{
+        var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0);
+        var ray: Ray;
+
+        var light = random_area((*hit).position,seed);
+
+        (ray).direction = light.direction;
+        (ray).tmin = 1e-4;
+        (ray).tmax= light.lightDist -1e-4;
+        (ray).origin = ((*hit).position);
+        var fragColor = vec3f(0.0);
+
+        var illumination = (light.intensity)*max(0.0,dot((*hit).normal,light.direction));
+        var res = intersect_scene(&ray,&shadow_hit);
+         if(res){
+           fragColor = (*hit).emission;
+        }
+        else{
+           fragColor = (*hit).emission +  (((*hit).diffuse)/3.14)*illumination;
+        }
+      return fragColor;
+
+    }
+
+    fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>,seed: ptr<function,u32>) -> vec3f{
+
+        switch (*hit).shader {
+            
+            case 0 { return directional_light(r, hit); }
+            case 1 { return area_shade(r, hit,seed); }
+            case default { return (*hit).color; }
+            }
+    }
+
+    fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
+        const eye_point = vec3<f32>(277.0, 275.0, -570.0);
+        const camera_pos = vec3<f32>(277.0, 275.0, 0.0);
+        const up_vector = vec3<f32>(0.0, 1.0, 0.0);
+
+        let v = normalize(camera_pos - eye_point);
+        let b1 = normalize(cross(v, up_vector));
+        let b2 = cross(b1, v);
+        let vector = mat3x3<f32>(b1, b2, v);
+
+        let q = vector * vec3<f32>(uv* camera_const,1.0);
+        let w = normalize(q);
+
+        return Ray(eye_point, w, 0.0, 1e20);
+        }
+
+
+    fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, mIndex: u32) -> bool {
+
+        let face_x = indices[mIndex][0];
+        let face_y = indices[mIndex][1];
+        let face_z = indices[mIndex][2];
+
+        let u0 = attributes[face_x].iPositions;
+        let u1 = attributes[face_y].iPositions;
+        let u2 = attributes[face_z].iPositions;
+
+        let n0 = attributes[face_x].iNormals;
+        let n1 = attributes[face_y].iNormals;
+        let n2 = attributes[face_z].iNormals;
+        //dot(e0,cross(r.direction,e1))
+
+        let e0 = u1 - u0; //b-a
+        let e1 = u2 - u0; //c-a
+
+        let n = cross(e0,e1);// normal
+        let d = -dot(u0, n);
+
+        var res = false;
+
+        let n_tmp = cross(u0 - r.origin, r.direction);
+        let t = dot(u0 - r.origin, n)/dot(n, r.direction);
+        let b = dot(n_tmp, e1) /dot(n, r.direction);
+        let g = -dot(n_tmp, e0) / dot(n, r.direction);
+        let intersection_point = r.origin + t* r.direction;
+        let barycentric = calculateBarycentricCoordinates(u0,u1,u2,intersection_point);
+        let interpolatedNormal = barycentric.x*n0 + barycentric.y*n1 + barycentric.z*n2;
+
+        if ((t < r.tmax) & (t > r.tmin)){
+            res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);}
+
+        if (res){
+            if ((*hit).dist > 0) {
+                (*hit).dist = min((*hit).dist, t);
+            }
+            else {
+                (*hit).dist = t;
+            }
+            (*hit).diffuse = vColors[indices[mIndex][3]].color;
+            (*hit).emission= vColors[indices[mIndex][3]].emission;
+            (*hit).color = vColors[indices[mIndex][3]].color + vColors[indices[mIndex][3]].emission;
+            (*hit).position = r.origin + (*hit).dist* r.direction;
+            (*hit).normal = normalize(interpolatedNormal);
+            (*hit).shader = 1;
+            
+            
+        }
+
+        return res;
+    }
+
+
+    fn calculateBarycentricCoordinates(v0: vec3<f32>,v1: vec3<f32>,v2: vec3<f32>,point: vec3<f32>) -> vec3<f32> {
+        let edge0 = v1 - v0;
+        let edge1 = v2 - v0;
+        let v0ToPoint = point - v0;
+
+        let dot00 = dot(edge0, edge0);
+        let dot01 = dot(edge0, edge1);
+        let dot02 = dot(edge0, v0ToPoint);
+        let dot11 = dot(edge1, edge1);
+        let dot12 = dot(edge1, v0ToPoint);
+
+        let invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+
+        let b = (dot11 * dot02 - dot01 * dot12) * invDenom;
+        let g = (dot00 * dot12 - dot01 * dot02) * invDenom;
+        let a = 1.0 - b - g;
+
+        return vec3<f32>(a, b, g);
+    }
+
+
+    fn intersect_min_max(r: ptr<function, Ray>) -> bool {
+        let p1 = (aabb.min - (*r).origin)/(*r).direction;
+        let p2 = (aabb.max - (*r).origin)/(*r).direction;
+
+        let pmin = min(p1, p2);
+        let pmax = max(p1, p2);
+
+        let tmin = max(pmin.x, max(pmin.y, pmin.z));
+        let tmax = min(pmax.x, min(pmax.y, pmax.z));
+
+        if(tmin > tmax || tmin > (*r).tmax || tmax < (*r).tmin) {
+
+            return false;
+
+        }
+
+        (*r).tmin = max(tmin - 1.0e-4f, (*r).tmin);
+        (*r).tmax = min(tmax + 1.0e-4f, (*r).tmax);
+
+        return true;
+
+    }
+
+    fn intersection_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitInfo>)->bool{
+        var branch_lvl = 0u;
+        var near_node = 0u;
+        var far_node = 0u;
+
+        var t = 0.0f;
+        var node = 0u;
+        for(var i = 0u; i <= MAX_LEVEL; i++) {
+            let tree_node = bspTree[node];
+
+            let node_axis_leaf = tree_node.x&3u;
+                if(node_axis_leaf == BSP_LEAF) {
+                let tree_node_count = tree_node.x>>2u;
+                let node_id = tree_node.y;
+                var found = false;
+                for (var j = 0u; j < tree_node_count; j++) {
+                    let obj_primIdx = iTrees[node_id + j];
+                    if (intersect_triangle(*r, hit, obj_primIdx)) {
+                        (*r).tmax = (*hit).dist;
+                        found =  true;
+                    }
+                }
+                if (found){ return true;}
+                else if (branch_lvl == 0u) {
+                    return false;
+                } else {
+                    branch_lvl--;
+                    i = branch_node[branch_lvl].x;
+                    (*r).tmin = branch_ray[branch_lvl].x;
+                    (*r).tmax = branch_ray[branch_lvl].y;
+                    node = branch_node[branch_lvl].y;
+                    continue;
+                }
+            }
+
+        let axis_direction = (*r).direction[node_axis_leaf];
+        let axis_origin = (*r).origin[node_axis_leaf];
+
+        if(axis_direction >= 0.0f) {
+            near_node = tree_node.z; // left
+            far_node = tree_node.w; // right
+        }
+        else {
+            near_node = tree_node.w; // right
+            far_node = tree_node.z; // left
+        }
+
+        let node_plane = bspPlanes[node];
+        let denom = select(axis_direction, 1.0e-8f, abs(axis_direction) < 1.0e-8f);
+        t = (node_plane - axis_origin)/denom;
+
+        if(t > (*r).tmax) { node = near_node; }
+        else if(t < (*r).tmin) { node = far_node; }
+        else {
+            branch_node[branch_lvl].x = i;
+            branch_node[branch_lvl].y = far_node;
+            branch_ray[branch_lvl].x = t;
+            branch_ray[branch_lvl].y = (*r).tmax;
+            branch_lvl++;
+            (*r).tmax = t;
+            node = near_node;
+            }
+        }
+        return false;
+    }
+
+    fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
+
+        var res= intersection_trimesh(r,hit);
+        if(intersect_min_max(r)){
+            if (res){
+                (*r).tmax = min((*hit).dist,(*r).tmax);
+                (*hit).has_hit = true; 
+            }
+        }
+
+        return (*hit).has_hit;
+    }
+    fn tea(val0: u32, val1: u32) -> u32
+
+    {
+        const N = 16u; // User specified number of iterations
+        var v0 = val0;
+        var v1 = val1;
+        var s0 = 0u;
+
+        for(var n = 0u; n < N; n++) {
+
+            s0 += 0x9e3779b9;
+            v0 += ((v1<<4)+0xa341316c)^(v1+s0)^((v1>>5)+0xc8013ea4);
+            v1 += ((v0<<4)+0xad90777d)^(v0+s0)^((v0>>5)+0x7e95761e);
+
+        }
+
+    return v0;
+
+    }
+
+    fn mcg31(prev: ptr<function, u32>) -> u32
+    {
+        const LCG_A = 1977654935u; // Multiplier from Hui-Ching Tang [EJOR 2007]
+        *prev = (LCG_A * (*prev)) & 0x7FFFFFFF;
+        return *prev;
+    }
+
+    fn rnd(prev: ptr<function, u32>) -> f32
+    {
+        return f32(mcg31(prev)) / f32(0x80000000);
+    }
+
+
+
+    @fragment
+    fn main_fs(@builtin(position) fragcoord: vec4f,@location(0) coords: vec2f) -> FSOut{
+
+        let launch_idx = u32(fragcoord.y)*u32(uniforms.width) + u32(fragcoord.x);
+        var t = tea(launch_idx, u32(uniforms.frame));
+        let jitter = vec2f(rnd(&t), rnd(&t))/f32(uniforms.height);
+        const max_depth = 10;
+        const bgcolor = vec4f(0.1,0.3,0.6,1.0);
+        var result = vec3<f32>(0.0, 0.0, 0.0);
+
+        let uv = vec2f(coords.x*0.5f, coords.y*0.5f);
+        var r = get_camera_ray(uv,uniforms.camera_const);
+
+        var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0);
+        for (var i = 0; i < i32(uniforms.subdivs); i++) {
+            for (var j = 0; j < i32(uniforms.subdivs); j++) {
+
+                let idx = (i * i32(uniforms.subdivs) + j);
+                let jitter_vec = jitters[idx];
+                let subpixel_uv = jitter_vec + uv;
+
+                var r = get_camera_ray(subpixel_uv, uniforms.camera_const);
+
+                for (var k = 0; k < max_depth; k++) {
+                    if (intersect_scene(&r, &hit)) {
+                        result += shade(&r,&hit,&t);
+                            }
+                    else { result += bgcolor.rgb; break; }
+                        if (hit.has_hit) { break; }
+                }
+            }
+        }
+        
+        
+        // Progressive update of image
+        let curr_sum = textureLoad(my_texture, vec2u(fragcoord.xy), 0).rgb*f32(uniforms.frame);
+        result /= f32(uniforms.subdivs * uniforms.subdivs);
+        let accum_color = (result + curr_sum)/f32(u32(uniforms.frame) + 1u);
+        var fsOut: FSOut;
+        fsOut.frame = vec4f(pow(accum_color, vec3f(1.0/uniforms.camera_const)), 1.0);
+        fsOut.accum = vec4f(accum_color, 1.0);
+        return fsOut;}
+  </script>
+  <head>
+    <title>Week 7.3</title>
+    <script type="text/javascript" src="week7.3.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
+    <script type="text/javascript" src="..\common\OBJParser_interleaved.js"></script>
+    <script type="text/javascript" src="..\common\BspTree_interleaved.js"></script>
+    <script type="text/javascript" src="..\common\Aabb.js"></script>
+  </head>
+  <body>
+    <canvas id="webgpu-canvas" width="512" height="512">
+      Please use a browser that supports HTML5 canvas.
+    </canvas>
+    <p>Current Subdivision Level: <span id="subdivisionLevel">1</span></p>
+    <button id="incrementButton">Increment</button>
+    <button id="decrementButton">Decrement</button>
+    <p>
+      <select id="addressMenu" size="2" style="display: none">
+        <option value="0" selected>Clamp to edge</option>
+        <option value="1">Repeat</option>
+      </select>
+      <select id="filterMenu" size="2" style="display: none">
+        <option value="0" selected>Nearest</option>
+        <option value="1">Linear</option>
+      </select>
+      <label for="menu1" style="display: none">Shading Sphere</label>
+      <select id="menu1" style="display: none">
+        <option value="1">Base Color</option>
+        <option value="2" selected>Lambertian</option>
+        <option value="3">Phong</option>
+        <option value="4">Mirror</option>
+        <option value="5">Refractive</option>
+        <option value="6">Glossy</option>
+      </select>
+
+      <br /><br />
+
+      <label for="menu2" style="display: none">Shading Objects</label>
+      <select id="menu2" style="display: none">
+        <option value="1">Base Color</option>
+        <option value="2" selected>Lambertian</option>
+      </select>
+      <br />
+      <button id="Texture" style="display: none">Texture</button>
+      <br />
+    </p>
+  </body>
+</html>

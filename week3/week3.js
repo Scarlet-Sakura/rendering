@@ -41,17 +41,18 @@ async function main() {
     },
   });
 
-  var camera_const = 1.5;
+  var camera_const = 1.0;
   var aspect_ratio = canvas.width / canvas.height;
   var sphere_option, object_option, texture_option;
-  var numJitters = 1;
+ // Initialize the subdivision level
+ var subdivisionLevel = 1;
   var uniforms = new Float32Array([
     aspect_ratio,
     camera_const,
     sphere_option,
     object_option,
     texture_option,
-    numJitters,
+    subdivisionLevel
   ]);
 
   var jitter = new Float32Array(200); // allowing subdivs from 1 to 10
@@ -69,20 +70,29 @@ async function main() {
   });
 
   device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+
+  const bindGroups2 = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(1),
+    entries: [
+        { binding: 0, resource: { buffer: uniformBuffer } },
+        { binding: 1, resource: { buffer: jitterBuffer } },
+      ],
+    });
+
   menu1.addEventListener("change", function () {
     // Get the selected value from menu1
     const sphere = document.getElementById("menu1").value;
     uniforms[2] = sphere;
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
     console.log(sphere);
-    render(device, context, pipeline, bindGroups[0]);
+    animate();
   });
   menu2.addEventListener("change", function () {
     // Get the selected value from menu2
     const object = document.getElementById("menu2").value;
     uniforms[3] = object;
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
-    render(device, context, pipeline, bindGroups[0]);
+    animate();
   });
 
   var button = document.getElementById("Texture");
@@ -94,6 +104,7 @@ async function main() {
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
   });
 
+ 
   async function load_texture(device, filename) {
     const img = document.createElement("img");
     img.src = filename;
@@ -172,7 +183,7 @@ async function main() {
     return texture;
   }
 
-  const texture = await load_texture(device, "grass.png");
+  const texture = await load_texture(device, "../textures/grass.jpg");
   console.log(texture);
 
   var bindGroups = [];
@@ -183,37 +194,10 @@ async function main() {
       entries: [
         { binding: 0, resource: texture.samplers[i] },
         { binding: 1, resource: texture.createView() },
-        { binding: 2, resource: { buffer: uniformBuffer } },
-        { binding: 3, resource: { buffer: jitterBuffer } },
+        
       ],
     });
     bindGroups.push(bindGroup);
-  }
-
-  function render(device, context, pipeline, bindGroup) {
-    // Create a render pass in a command buffer and submit it
-    const encoder = device.createCommandEncoder();
-    const pass = encoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: context.getCurrentTexture().createView(),
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
-    });
-
-    // Insert render pass commands here
-    pass.setPipeline(pipeline);
-
-    // Set the bind group which contains both bindings
-    pass.setBindGroup(0, bindGroup);
-
-    // Draw
-    pass.draw(4);
-
-    pass.end();
-    device.queue.submit([encoder.finish()]);
   }
 
   // Create event listeners for the select elements
@@ -227,6 +211,7 @@ async function main() {
     var address = document.getElementById("addressMenu").value;
     var filter = document.getElementById("filterMenu").value;
     console.log("Address: " + address + ", Filter: " + filter);
+
 
     var groupNumber;
 
@@ -243,15 +228,20 @@ async function main() {
       groupNumber = 3;
     }
 
-    render(device, context, pipeline, bindGroups[groupNumber]);
+        
+    uniforms[5] = subdivisionLevel;
+    compute_jitters(jitter, 1 / canvas.height, subdivisionLevel);
+
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    device.queue.writeBuffer(jitterBuffer, 0, jitter);
+
+    render(device, context, pipeline, bindGroups[groupNumber],bindGroups2);
   }
+  animate();
 
   const subdivisionLevelElement = document.getElementById("subdivisionLevel");
   const incrementButton = document.getElementById("incrementButton");
   const decrementButton = document.getElementById("decrementButton");
-
-  // Initialize the subdivision level
-  let subdivisionLevel = 1;
 
   // Update the subdivision level display
   function updateSubdivisionLevel() {
@@ -259,7 +249,9 @@ async function main() {
     const numericValue = parseInt(subdivisionLevelElement.textContent, 10); // Use parseInt to parse as an integer
 
     console.log(numericValue); // This will log the number 42
+    
     compute_jitters(jitter, 1 / canvas.height, numericValue);
+    
   }
 
   // Event listener for the increment button
@@ -284,11 +276,6 @@ async function main() {
 
   function compute_jitters(jitter, pixelsize, subdivs) {
     const step = pixelsize / subdivs;
-    numJitters = subdivs * subdivs; // Calculate the number of jitter vectors
-    // Update the numJitters uniform variable in the GPU buffer
-    uniforms[5] = numJitters;
-    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
-    console.log(uniforms[5]);
     if (subdivs < 2) {
       jitter[0] = 0.0;
       jitter[1] = 0.0;
@@ -301,8 +288,34 @@ async function main() {
         }
       }
     }
-    console.log(jitter[2]);
-    device.queue.writeBuffer(jitterBuffer, 0, jitter);
-    animate();
   }
+
+  
+  function render(device, context, pipeline, bindGroup,bindGroup2) {
+    // Create a render pass in a command buffer and submit it
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+
+    // Insert render pass commands here
+    pass.setPipeline(pipeline);
+
+    // Set the bind group which contains both bindings
+    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(1, bindGroup2);
+
+    // Draw
+    pass.draw(4);
+
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  }
+
 }

@@ -1,305 +1,245 @@
 <!DOCTYPE html>
 <html>
   <script id="wgsl" type="x-shader">
-
-                struct Uniforms {
-                    aspect_ratio: f32,
-                    camera_const: f32,
-                    rotation_angle:f32,
-                    rotation_axis:f32,
-                   };
-                   struct Onb {
-                    tangent: vec3f,
-                    binormal: vec3f,
-                    normal: vec3f,
-                    };
-
-                    struct Light {
-                        source: vec3f,
-                        intensity: f32,
-                        lightDist: f32,
-                        direction: vec3f
-                        };
-
-                    fn sample_light(pos: vec3f) -> Light
-                        {
-
-                            var intensity = 3.14;
-                            var source = vec3<f32>(0.0,1.0,0.0);
-                            var distance = length(source - pos);
-                            var dir =  normalize(source - pos );
-                            var light = Light(source,intensity/pow(distance,2),distance,dir);
+    
+    @group(0) @binding(0) var my_sampler: sampler;
+    @group(0) @binding(1) var my_texture: texture_2d<f32>;
+    @group(0) @binding(2) var<uniform> uniforms : Uniforms;
 
 
-                            return light;
-                        }
+    struct Uniforms {
+        aspect_ratio: f32,
+        camera_const: f32,
+        rotation_angle:f32,
+        texture: i32,
+    };
+    
+    struct Light {
+        source: vec3f,
+        intensity: f32,
+        lightDist: f32,
+        direction: vec3f
+    };
 
+    struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) coords : vec2f,
+    };
+    
+    struct HitInfo {
+        has_hit: bool,
+        dist: f32,
+        position: vec3<f32>,
+        normal: vec3<f32>,
+        color: vec3<f32>,
+        shininess:f32,
+        specular:f32,
+        refraction:f32,
+        shader:i32,
+        use_texture:bool,
+        texcoords: vec2<f32>,
+    };
 
-            @group(0) @binding(0) var my_sampler: sampler;
-            @group(0) @binding(1) var my_texture: texture_2d<f32>;
+   struct Ray {
+     origin: vec3<f32>,
+     direction: vec3<f32>,
+     tmin: f32,
+     tmax: f32,
+    };
 
+    fn directional_light(r: ptr<function, Ray>, hit: ptr<function, HitInfo>,dr:f32) -> vec3f {
+        let ambient = 0.5 * (*hit).color;
+        var theta = 0.01;
+        theta+=dr;
+        var intensity = 2.5;
+        var direction = normalize(vec3f(-1.0*cos(theta),-1.0*sin(theta),0.0));
+        let l_r = ((*hit).color / 3.14) * intensity * dot((*hit).normal, -direction);
+        let diffuse = 0.9 * l_r;
+        return ambient + diffuse;
+    }
 
+    @vertex
 
-            @group(0) @binding(2) var<uniform> uniforms : Uniforms;
+    fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
+    {
 
-                struct VSOut {
-                    @builtin(position) position: vec4f,
-                    @location(0) coords : vec2f,
-                    };
+        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+        var vsOut: VSOut;
 
+        vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
+        vsOut.coords = pos[VertexIndex];
+        return vsOut;
+    }
+       
+    fn torIntersect( ray:Ray, hit:ptr<function,HitInfo>, tor:vec2f ) ->bool
+    {
+ 
+        let R2 = tor.x*tor.x;
+        let r2 = tor.y*tor.y;
 
-                @vertex
+        let o = ray.origin;
+        let dir = ray.direction;
 
-                fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
-                {
+        //coefficients I get when replacing the ray intersect equation
+        //in the implicit equation of the torus
 
-                    const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
-                    var vsOut: VSOut;
+        let c2 = dot(o,o);
+        let c1 = 2*dot(o,dir);
+        let c0 = dot(dir,dir) + R2 -r2;
 
-                    vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
-                    vsOut.coords = pos[VertexIndex];
-                    return vsOut;
+        let k2 = 4*R2*(o.x*o.x + o.y*o.y);
+        let k1 = 8*R2*(o.x*dir.x + o.y*dir.y);
+        let k0 = 4*(dir.x*dir.x + dir.y*dir.y);
+
+        //initialise distance 
+        var t = 1e2;
+
+        // cases start with cubic 
+        //when a = c2*c2 == 0
+
+        if(c2*c2<0.01){
+
+            if(2*c2*c1<0.01){
+                //becomes quadratic
+                let a =(2*c2*c0 + c1*c1 - k2);
+                let b = (2*c1*c0 - k1);
+                let c = (c0*c0 - k0);
+
+                let D = b*b - 4*a*c;
+                
+                //we have solutions - two real or one double when
+                if(D>=0){
+                    var t1 = (-b + sqrt(b*b-4*a*c))/(2*a);
+                    var t2 = (-b - sqrt(b*b-4*a*c))/(2*a);
+                    if(t1 > 0) {t = t1;}
+                    if(t2 > 0) {t = min(t,t2);}  
                 }
-                fn rotate_y(vec: vec3<f32>, angle: f32) -> vec3<f32> {
-                    let c = cos(angle);
-                    let s = sin(angle);
-                    return vec3<f32>(
-                        vec.x * c + vec.z * s,
-                        vec.y,
-                        -vec.x * s + vec.z * c
-                    );
-                }
-
-                struct HitInfo {
-                    has_hit: bool,
-                    dist: f32,
-                    position: vec3<f32>,
-                    normal: vec3<f32>,
-                    color: vec3<f32>,
-                    shininess:f32,
-                    specular:f32,
-                    refraction:f32,
-                    shader:i32,
-                    use_texture:bool,
-                    texcoords: vec2<f32>,
-                };
-
-               struct Ray {
-                 origin: vec3<f32>,
-                 direction: vec3<f32>,
-                 tmin: f32,
-                 tmax: f32,
-             };
-             struct Plane {
-                position: vec3<f32>,
-                normal: vec3<f32>,
-                color: vec3<f32>,
-            };
-
-            fn lambertian(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-
-
-
-                var shadow_hit: HitInfo = HitInfo(false, -1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),42.0,0.1,1.0,0,false,vec2<f32>(0.0));
-                 var ray: Ray;
-                 var light = sample_light((*hit).position);
-
-                 var distance = light.lightDist;
-
-                 (ray).direction = light.direction;
-
-                 (ray).tmin = 1e-4;
-
-                 (ray).tmax= distance - 1e-4;
-
-                 (ray).origin = ((*hit).position);
-
-
-                 var fragColor = vec3f(0.0);
-
-
-
-                 var illumination = max(0.0,dot((*hit).normal,light.direction))/ (distance * distance);
-
-
-                 var res = intersect_scene(&ray,&shadow_hit);
-                 var ambient = vec3f(0.1*(*hit).color.rgb[0],0.1*(*hit).color.rgb[1],0.1*(*hit).color.rgb[2]);
-                 var diffuse = vec3f(0.9*(*hit).color.rgb[0],0.9*(*hit).color.rgb[1],0.9*(*hit).color.rgb[2]);
-
-
-                 if(res){
-
-                    fragColor = ambient;
-                 }
-                 else{
-
-                     fragColor =ambient + diffuse*illumination;}
-
-
-
-                 return fragColor;
-
-             }
-
-             // torus
-             fn torIntersect( ray:Ray, hit:ptr<function,HitInfo>, tor:vec2f ) ->bool
-             {
-                 var po = 1.0;
-                 var Ra2 = tor.x*tor.x;
-                 var ra2 = tor.y*tor.y;
-                 var m = dot(ray.origin,ray.origin);
-                 var n = dot(ray.origin,ray.direction);
-                 var k = (m + Ra2 - ra2)/2.0;
-                 var k3 = n;
-                 var k2 = n*n - Ra2*dot(ray.direction.xy,ray.direction.xy) + k;
-                 var k1 = n*k - Ra2*dot(ray.direction.xy,ray.origin.xy);
-                 var k0 = k*k - Ra2*dot(ray.origin.xy,ray.origin.xy);
-
-                 if( abs(k3*(k3*k3-k2)+k1) < 0.01 )
-                 {
-                     po = -1.0;
-                     var tmp=k1; k1=k3; k3=tmp;
-                     k0 = 1.0/k0;
-                     k1 = k1*k0;
-                     k2 = k2*k0;
-                     k3 = k3*k0;
-                 }
-
-                 var c2 = k2*2.0 - 3.0*k3*k3;
-                 var c1 = k3*(k3*k3-k2)+k1;
-                 var c0 = k3*(k3*(c2+2.0*k2)-8.0*k1)+4.0*k0;
-                 c2 /= 3.0;
-                 c1 *= 2.0;
-                 c0 /= 3.0;
-                 var Q = c2*c2 + c0;
-                 var R = c2*c2*c2 - 3.0*c2*c0 + c1*c1;
-                 var h = R*R - Q*Q*Q;
-
-                 if( h>=0.0 )
-                 {
-                     h = sqrt(h);
-                     var v = sign(R+h)*pow(abs(R+h),1.0/3.0); // cube root
-                     var u = sign(R-h)*pow(abs(R-h),1.0/3.0); // cube root
-                     var s = vec2( (v+u)+4.0*c2, (v-u)*sqrt(3.0));
-                     var y = sqrt(0.5*(length(s)+s.x));
-                     var x = 0.5*s.y/y;
-                     var r = 2.0*c1/(x*x+y*y);
-                     var t1 = x - r - k3;
-                     var t2 = -x - r - k3;
-
-                     if (po < 0.0) {
-                         t1 = 2.0 / t1;
-                         t2 = 2.0 / t2;
-                     }
-                     var t = 1e20;
-                     if( t1>0.0 ) {t=t1;}
-                     if( t2>0.0 ) {t=min(t,t2);}
-                     var condition = (t>ray.tmin) & (t<ray.tmax);
-                     if(condition){
-                        (*hit).dist = t;
-                        let intersection_point = ray.origin + (*hit).dist * ray.direction;
-                        (*hit).position =intersection_point;
-                        (*hit).normal = torNormal(intersection_point,tor);
-                        (*hit).color = vec3f(0.8,0.2,0.1);
-                        return true; }
-                        return false;
-                 }
-
-                 var sQ = sqrt(Q);
-                 var w = sQ*cos( acos(-R/(sQ*Q)) / 3.0 );
-                 var d2 = -(w+c2); if( d2<0.0 ) {return false;}
-                 var d1 = sqrt(d2);
-                 var h1 = sqrt(w - 2.0*c2 + c1/d1);
-                 var h2 = sqrt(w - 2.0*c2 - c1/d1);
-                var t1 = -d1 - h1 - k3;
-                 if (po < 0.0) {
-                     t1 = 2.0 / t1;
-                 } else {
-                     t1 = t1;
-                 }
-
-                var t2 = -d1 + h1 - k3;
-                 if (po < 0.0) {
-                     t2 = 2.0 / t2;
-                 } else {
-                     t2 = t2;
-                 }
-
-                var t3 = d1 - h2 - k3;
-                 if (po < 0.0) {
-                     t3 = 2.0 / t3;
-                 } else {
-                     t3 = t3;
-                 }
-
-                var t4 = d1 + h2 - k3;
-                 if (po < 0.0) {
-                     t4 = 2.0 / t4;
-                 } else {
-                     t4 = t4;
-                 }
-                 var t = 1e20;
-                 if( t1>0.0 ) {t=t1;}
-                 if( t2>0.0 ) {t=min(t,t2);}
-                 if( t3>0.0 ) {t=min(t,t3);}
-                 if( t4>0.0 ) {t=min(t,t4);}
-                 if((t>ray.tmin) & (t<ray.tmax)){
-                    (*hit).dist = t;
-                    let intersection_point = ray.origin + (*hit).dist * ray.direction;
-                    (*hit).position =intersection_point;
-                    (*hit).normal = torNormal(intersection_point,tor);
-                return true; }
-                 return false;
-             }
-
-             fn torNormal(  pos:vec3f, tor:vec2f )->vec3<f32>
-             {
-                 return normalize( pos*(dot(pos,pos)-tor.y*tor.y - tor.x*tor.x*vec3(1.0,1.0,-1.0)));
-             }
-
-        fn intersect_plane(r: Ray, hit:ptr<function,HitInfo>,position: vec3f, normal:vec3f)->bool{
-            let d = -dot(position, normal);
-            let t = -(dot(r.origin,normal) + d)/dot(normal,r.direction);
-
-            var res = (t < r.tmax) & (t > r.tmin);
-            if (res) {
-                if ((*hit).dist > 0) {
-                    (*hit).dist = min((*hit).dist, t);
-                }
-                else {
-                    (*hit).dist = t;
-                }
-                let intersection_point = r.origin + (*hit).dist * r.direction;
-                (*hit).position =intersection_point;
-                (*hit).normal = normal;
             }
-            return res;
+        
+            else{
+                //coefficients for cubic equation
+                
+                let a = 2*c2*c1;
+                let b = (2*c2*c0 + c1*c1 - k2);
+                let c = (2*c1*c0 - k1);
+                let d = (c0*c0 - k0);
 
+                //finding discriminant
+
+                var Q = (3*a*c - b*b)/(9*a*a);
+                var R = (9*a*b*c - 27*a*a*d - 2*b*b*b)/(54*a*a*a);
+                var D = Q*Q*Q + R*R; //discriminant
+
+                //finding real roots
+    
+                if(D<0){
+                    let theta = acos(R/sqrt(-Q*Q*Q));
+                    var t1 = 2*sqrt(-Q)*cos(theta/3) - b/(3*a);
+                    var t2 = 2*sqrt(-Q)*cos(theta/3 + (2*3.14)/3) -b/(3*a);
+                    var t3 = 2*sqrt(-Q)*cos(theta/3 + (4*3.14)/3) - b/(3*a);
+                    if(t1 > 0) {t = t1;}
+                    if(t2 > 0) {t = t2;} 
+                    if(t3 > 0) {t = min(t,t3);} 
+                }
+
+            }
         }
 
-        fn get_camera_ray(uv: vec2<f32>, camera_const : f32,rotation_angle:f32) -> Ray {
-            var eye_point =vec3f(0.0);
-            if(uniforms.rotation_angle==1.0){
-            eye_point = vec3<f32>(2.5*cos(rotation_angle),1.0,2.5*sin(rotation_angle));}
+        else{
+
+            //the general case 
+            let a = c2*c2;
+            let b = 2*c1*c2;
+            let c = (2*c2*c0 + c1*c1 - k2);
+            let d = (2*c1*c0 - k1);
+            let e = (c0*c0 - k0);
+
+            let p = (8*a*c - 3*b*b)/(8*a*a);
+            let q = (b*b*b - 4*a*b*c + 8*a*a*d)/(8*a*a*a);
+            let r = (16*a*b*b*c - 64*a*a*b*d - 3*b*b*b*b + 256*a*a*a*e)/(256*a*a*a*a);
+
+            // the four possible cases of quartic equations with multiple roots
+            if(q ==0 && p==0 && r == 0){
+                if(-b/(4*a)>0){
+                    t = -b/(4*a);
+                }
+            }
+
+            else if(p == sqrt(-12*r) && p>0 && -8*p*p*p>0 && 27*q*q==-8*p*p*p){
+                if(q>0){
+                  var t1 = sqrt(-p/6) - b/(4*a);
+                  var t2 = -sqrt(-3*p/2) - b/(4*a);
+                  if(t1 > 0) {t = t1;}
+                  if(t2 > 0) {t = min(t,t2);}  
+                }
                 else {
-                    eye_point = vec3<f32>(1.0,2.5*cos(rotation_angle),2.5*sin(rotation_angle));}
+                    var t1 = -sqrt(-p/6) - b/(4*a);
+                    var t2 = sqrt(-3*p/2) - b/(4*a);
+                    if(t1 > 0) {t = t1;}
+                    if(t2 > 0) {t = min(t,t2);}  
+                }
 
-            const camera_pos = vec3<f32>(0.0, 0.0, 0.0);
-            const up_vector = vec3<f32>(0.0, 1.0, 0.0);
+            }
 
-            let v = normalize(camera_pos - eye_point);
-            let b1 = normalize(cross(v, up_vector));
-            let b2 = cross(b1, v);
-            let vector = mat3x3<f32>(b1, b2, v);
-            let q = vector * vec3<f32>(uv* camera_const,1.0);
+            else if(4*r>0 && p*p == 4*r && p*p ==q){
+                var t1 = sqrt(-p/2) - b/(4*a);
+                var t2 = -sqrt(-p/2) - b/(4*a);
+                if(t1 > 0) {t = t1;}
+                if(t2 > 0) {t = min(t,t2);}  
+            }
 
-            let w = normalize(q);
+            else if(p!=q && q == r && r==0){
+                var t1 = -b/(4*a);
+                var t2 = sqrt(-p) - b/(4*a);
+                var t3 = -sqrt(-p) - b/(4*a);
+                if(t1 > 0) {t = t1;}
+                if(t2 > 0) {t = t2;} 
+                if(t3 > 0) {t = min(t,t3);} 
+            }
 
-            return Ray(eye_point, w, 0.0, 1.0e2);
+     
         }
-        // Torus texture mapping function
+
+        if((t>ray.tmin) & (t<ray.tmax)){
+            (*hit).dist = t;
+            let intersection_point = ray.origin + (*hit).dist * ray.direction;
+            (*hit).position =intersection_point;
+            (*hit).normal = torNormal(intersection_point,tor);
+            (*hit).color = vec3f(0.5,0.2,0.1);
+            return true; 
+        }
+            
+        return false;
+}
+
+
+    fn torNormal(  pos:vec3f, tor:vec2f )->vec3<f32>
+    {   
+        let a = tor.x/(sqrt(pow(pos.x,2)+pow(pos.y,2)));
+        let n = vec3f((1-a)*pos.x,(1-a)*pos.y,pos.z);
+        return normalize(n);
+    }
+
+    fn get_camera_ray(uv: vec2<f32>, camera_const : f32,dr:f32) -> Ray {
+        var theta = 0.01;
+        theta+=dr;
+        var eye_point =vec3f(cos(theta),sin(theta),2.5);
+        
+        const camera_pos = vec3<f32>(0.0, 0.0, 0.0);
+        const up_vector = vec3<f32>(0.0, 1.0, 0.0);
+
+        let v = normalize(camera_pos - eye_point);
+        let b1 = normalize(cross(v, up_vector));
+        let b2 = cross(b1, v);
+        let vector = mat3x3<f32>(b1, b2, v);
+        let q = vector * vec3<f32>(uv* camera_const,1.0);
+
+        let w = normalize(q);
+
+        return Ray(eye_point, w, 1.0e-2, 1.0e32);
+    }
+       
     fn torusTextureCoordinates(pos: vec3<f32>, tor: vec2<f32>) -> vec2<f32> {
-        // Example: Use cylindrical coordinates for texture mapping
         let phi = atan2(pos.y, pos.x);
         let theta = acos(clamp(pos.z / tor.x, -1.0, 1.0));
         var u = (phi + 3.14) / (2.0 * 3.14);
@@ -309,175 +249,86 @@
         return vec2<f32>(u, v);
     }
 
-        fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool{
-            const plane: Plane = Plane(vec3<f32>(0.0,0.0,0.0),vec3<f32>(0.0,1.0,0.0),vec3<f32>(0.1, 0.7, 0.0));
-            var currentPos = (*r).origin + (*hit).dist * (*r).direction;
-            (*hit).position = currentPos;
+    fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool{
+        var currentPos = (*r).origin + (*hit).dist * (*r).direction;
+        (*hit).position = currentPos;
 
+        var res = torIntersect(*r,hit,vec2(0.5,0.25));
 
-           var res = torIntersect(*r,hit,vec2(0.5,0.25));
-
-
-                    // Check for intersection with tor
-            if (res) {
-                    (*r).tmax = min((*hit).dist,(*r).tmax);
-                    (*hit).has_hit = true;
-                    if ((*r).tmax == (*hit).dist) {
-                    (*hit).color = vec3<f32>(0.7, 0.0, 0.5);}
-                    (*hit).texcoords = torusTextureCoordinates((*hit).position, vec2<f32>(0.5, 0.25));
-                    (*hit).shader = 0;
-                }
-
-
-
-            return (*hit).has_hit;
-        }
-
-        fn mirror(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-
-
-            var reflection = reflect((*r).direction,(*hit).normal);
-
-            (*r).direction = normalize(reflection);
-
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e4;
-
-            (*r).origin = (*hit).position;
-
-            (*hit).has_hit = false;
-
-            var fragColor = vec3<f32>(0.0);
-            return fragColor;
-
-         }
-         fn refractive(r: ptr<function,Ray>,hit:ptr<function,HitInfo>)->vec3f{
-            (*hit).has_hit = false;
-
-           // const sphere: Sphere = Sphere(vec3<f32>(0.0,0.5,0.0),0.3,1.5,42,vec3<f32>(0.0,0.0,0.0));
-
-
-            var product = dot((*hit).normal,(*r).direction);
-            var h1 = 1.0;
-            var h2 = 1.5;
-
-            if(product>0)
-            {  h2 = 1.0;
-               h1 = 1.5;
-               (*hit).normal = -(*hit).normal;
-
-                }
-
-
-            (*hit).refraction = h1/h2;
-            var refraction_dir = refract((*r).direction,(*hit).normal,(*hit).refraction);
-
-            var cos_theta = 1 - pow((*hit).refraction,2)*(1-pow(dot(-(*r).direction,(*hit).normal),2));
-
-          if(cos_theta<0){
-              return mirror(r,hit);
-
-           }
-
-
-            (*r).direction = refraction_dir;
-
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e4;
-            (*r).origin = (*hit).position;
-
-            var fragColor = vec3<f32>(0.0);
-
-            return fragColor;
-         }
-
-        @fragment
-        // Main function for ray tracing
-        fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f
-        {
-           const max_depth = 10;
-           const bgcolor = vec4f(0.7, 0.0, 0.5, 1.0);
-
-           var color = vec3<f32>(0.0, 0.0, 0.0);
-
-           var textured = vec3<f32>(0.0, 0.0, 0.0);
-           let uv = vec2f(coords.x * uniforms.aspect_ratio * 0.5f, coords.y * 0.5f);
-
-           var r = get_camera_ray(uv, uniforms.camera_const,uniforms.rotation_angle);
-
-           var hit: HitInfo = HitInfo(false, -1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),42.0,0.1,1.0,0,false,vec2<f32>(0.0));
-
-            // Perform ray marching
-            for (var i: i32 = 0; i < max_depth; i = i + 1) {
-                if (intersect_scene(&r, &hit)) {
-                    textured+=(hit).color;
-                } else {
-                    // Move the ray along its direction for the next iteration
-                    var currentPos = r.origin + r.direction * f32(i);
-                    hit.position = currentPos;
-                    hit.dist = f32(i);
-                    textured =color;
-                    break;
-                }
-
-                if (hit.has_hit) {
-                    break;
-                }
+        if (res) {
+                (*r).tmax = min((*hit).dist,(*r).tmax);
+                (*hit).has_hit = true;
+                if ((*r).tmax == (*hit).dist) {
+                (*hit).color = vec3<f32>(1.0, 1.0,1.0);}
+                (*hit).texcoords = torusTextureCoordinates((*hit).position, vec2<f32>(0.5, 0.25));
+                (*hit).shader = 0;
             }
-            let texColor = textureSample(my_texture, my_sampler, hit.texcoords).rgb;
-            color += textured * texColor;
 
-            // Apply background color if no intersection is found
-            /*if (!hit.has_hit) {
-                color = vec3<f32>(0.0, 0.0, 0.0);  // Black color (adjust as needed)
-            }*/
-            return vec4f(pow(color, vec3f(1.0 / uniforms.camera_const)), bgcolor.a);
+        return (*hit).has_hit;
+    }
+
+
+
+    @fragment
+    // Main function for ray tracing
+    fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f
+    {
+        const max_depth = 10;
+        var color = vec3<f32>(0.0, 0.0, 0.0);
+
+        var textured = vec3<f32>(0.0, 0.0, 0.0);
+        let uv = vec2f(coords.x * uniforms.aspect_ratio * 0.5f, coords.y * 0.5f);
+
+        var r = get_camera_ray(uv, uniforms.camera_const,uniforms.rotation_angle);
+
+        var hit: HitInfo = HitInfo(false, -1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),42.0,0.1,1.0,0,false,vec2<f32>(0.0));
+
+        for (var i: i32 = 0; i < max_depth; i = i + 1) {
+            if (intersect_scene(&r, &hit)) {
+                textured+=directional_light(&r,&hit,uniforms.rotation_angle);
+            } else {
+                textured +=color;
+                break;
+            }
+
+            if (hit.has_hit) {
+                break;
+            }
         }
+        let texColor = textureSample(my_texture, my_sampler, hit.texcoords).rgb;
+        color += textured * texColor;
+
+        return vec4f(pow(color, vec3f(1.0 / uniforms.camera_const)), 1.0);
+    }
   </script>
 
   <head>
     <title>Week 3</title>
     <script type="text/javascript" src="project.js"></script>
-    <script type="text/javascript" src="common\MV.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
   </head>
 
   <body>
     <canvas id="webgpu-canvas" width="512" height="512">
       Please use a browser that supports HTML5 canvas.
     </canvas>
-    <select id="addressMenu" size="2">
-      <option value="0" selected>Clamp to edge</option>
-      <option value="1">Repeat</option>
-    </select>
-    <select id="filterMenu" size="2">
-      <option value="0" selected>Nearest</option>
-      <option value="1">Linear</option>
-    </select>
     <br />
     <input
-      id="rotationAngleSliderY"
+      id="rotationAngle"
       type="range"
-      min="90"
-      max="270"
+      min="0"
+      max="180"
       step="1"
       value="0"
     />
-    <output id="rotationAngleValueY"></output>
+    <output id="rotationAngleValue"></output>
     <br />
-    <input
-      id="rotationAngleSliderX"
-      type="range"
-      min="90"
-      max="270"
-      step="1"
-      value="0"
-    />
-    <output id="rotationAngleValueX"></output>
-    <label for="flavors">Choose a flavor:</label>
-    <select name="flavors" id="flavors">
-      <option value="candy">Candy</option>
-      <option value="chocolate">Chocolate</option>
-      <option value="strawberry">Strawberry</option>
+  
+    <label for="patterns">Choose a pattern:</label>
+    <select name="patterns" id="patterns">
+      <option value="checkered">Checkered</option>
+      <option value="geometric">Geometric</option>
+      <option value="waves">Waves</option>
     </select>
   </body>
 </html>
