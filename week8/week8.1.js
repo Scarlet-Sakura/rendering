@@ -236,7 +236,7 @@ async function main() {
     const numericValue = parseInt(subdivisionLevelElement.textContent, 10); // Use parseInt to parse as an integer
 
     console.log(numericValue); // This will log the number 42
-    //compute_jitters(jitter, 1 / canvas.height, numericValue);
+    compute_jitters(jitter, 1 / canvas.height, numericValue);
     animate();
   }
 
@@ -251,7 +251,7 @@ async function main() {
 
   // Event listener for the decrement button
   decrementButton.addEventListener("click", () => {
-    if (subdivisionLevel >= 1) {
+    if (subdivisionLevel > 1) {
       subdivisionLevel--;
       updateSubdivisionLevel();
       // Call a function to update jitter vectors and perform ray tracing with the new level.

@@ -236,13 +236,14 @@
 
         //direct illumination
         if((*hit).emit_flagg){
-            (*hit).emit_flagg = false;
-            fragColor = (*hit).diffuse*brdf*illumination + emission;
+            
+            fragColor = emission;    
         }
         //indirect
         else{
             fragColor = (*hit).diffuse*brdf*illumination;
         }
+        (*hit).emit_flagg = false;
 
         return fragColor;
     }

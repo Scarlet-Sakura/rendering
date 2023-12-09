@@ -171,7 +171,7 @@ async function main() {
       requestAnimationFrame(animate);
       return;
     }
-    uniforms[5] = subdivisionLevel;
+    uniforms[4] = subdivisionLevel;
     //console.log(uniforms[5]);
     compute_jitters(jitter, 1 / canvas.height, subdivisionLevel);
 
