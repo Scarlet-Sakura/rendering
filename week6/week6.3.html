@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html>
   <script id="wgsl" type="x-shader">
+    //make the triangle face an array of vec4u
+    //create an attrribute struct
+    @group(0) @binding(0) var<storage,read> vColors: array<colors>;
+    @group(0) @binding(1) var<storage,read> indices: array<vec4u>;
+    @group(0) @binding(2) var<uniform> aabb : Aabb;
+    @group(0) @binding(3) var<storage,read> iTrees: array<u32>;
+    @group(0) @binding(4) var<storage,read> bspTree: array<vec4u>;
+    @group(0) @binding(5) var<storage,read> bspPlanes: array<f32>;
+    @group(0) @binding(6) var<storage,read> attributes: array<Attributes>;
+    @group(0) @binding(7) var<storage,read> mLights: array<u32>;
+
+    @group(1) @binding(0) var<uniform> uniforms: Uniforms;
+    @group(1) @binding(1) var<storage,read> jitter: array<vec2f>;
+
     struct Aabb {
         min: vec3f,
         max: vec3f,
@@ -29,20 +43,6 @@
         radius: f32,
         refractive_index: f32,
     }
-
-    //make the triangle face an array of vec4u
-    //create an attrribute struct
-    @group(0) @binding(0) var<storage,read> vColors: array<colors>;
-    @group(0) @binding(1) var<storage,read> indices: array<vec4u>;
-    @group(0) @binding(2) var<uniform> aabb : Aabb;
-    @group(0) @binding(3) var<storage,read> iTrees: array<u32>;
-    @group(0) @binding(4) var<storage,read> bspTree: array<vec4u>;
-    @group(0) @binding(5) var<storage,read> bspPlanes: array<f32>;
-    @group(0) @binding(6) var<storage,read> attributes: array<Attributes>;
-    @group(0) @binding(7) var<storage,read> mLights: array<u32>;
-
-    @group(1) @binding(0) var<uniform> uniforms: Uniforms;
-    @group(1) @binding(1) var<storage,read> jitter: array<vec2f>;
 
     const MAX_LEVEL = 20u;
     const BSP_LEAF = 3u;
