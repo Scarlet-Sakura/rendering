@@ -1,5 +1,5 @@
 "use strict";
-var obj_filename = "objects/CornellBoxWithBlocks.obj";
+var obj_filename = "../objects/CornellBoxWithBlocks.obj";
 
 var g_objDoc = null; // Info parsed from OBJ file
 var g_drawingInfo = null; // Info for drawing the 3D model with WebGL

@@ -142,8 +142,9 @@
                 case 1 { return area_shade(r, hit); }
                 case default { return (*hit).color; }
 
+            }
         }
-    }
+
         fn area_shade(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
                 var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0.0);
                 var ray: Ray;
@@ -167,8 +168,6 @@
                    fragColor = (*hit).emission +  (((*hit).diffuse)/3.14)*illumination;
                 }
               return fragColor;
-
-
         }
 
         fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
@@ -185,105 +184,100 @@
             let w = normalize(q);
 
             return Ray(eye_point, w, 0.0, 10e32);
+        }
+
+
+        fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, face: vec3u, mIndex: u32) -> bool {
+            let u0 = vPositions[face[0]];
+            let u1 = vPositions[face[1]];
+            let u2 = vPositions[face[2]];
+
+            let n0 = vNormals[face[0]];
+            let n1 = vNormals[face[1]];
+            let n2 = vNormals[face[2]];
+            //dot(e0,cross(r.direction,e1))
+
+            let e0 = u1 - u0; //b-a
+            let e1 = u2 - u0; //c-a
+
+            let n = cross(e0,e1);// normal
+            let d = -dot(u0, n);
+
+
+            var res = false;
+
+            let n_tmp = cross(u0 - r.origin, r.direction);
+            let t = dot(u0 - r.origin, n)/dot(n, r.direction);
+
+            let b = dot(n_tmp, e1) /dot(n, r.direction);
+            let g = -dot(n_tmp, e0) / dot(n, r.direction);
+            let intersection_point = r.origin + t* r.direction;
+            let barycentric = calculateBarycentricCoordinates(u0,u1,u2,intersection_point);
+            let interpolatedNormal = barycentric.x*n0 + barycentric.y*n1 + barycentric.z*n2;
+
+            if ((t < r.tmax) & (t > r.tmin)){
+                res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);}
+                if (res){
+
+                    if ((*hit).dist > 0) {
+                        (*hit).dist = min((*hit).dist, t);
+                    }
+                    else {
+                        (*hit).dist = t;
+                    }
+                    (*hit).position = r.origin + (*hit).dist* r.direction;
+                    (*hit).normal = normalize(interpolatedNormal);
+
             }
 
-
-            fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, face: vec3u, mIndex: u32) -> bool {
-                let u0 = vPositions[face[0]];
-                let u1 = vPositions[face[1]];
-                let u2 = vPositions[face[2]];
-
-                let n0 = vNormals[face[0]];
-                let n1 = vNormals[face[1]];
-                let n2 = vNormals[face[2]];
-                //dot(e0,cross(r.direction,e1))
-
-                let e0 = u1 - u0; //b-a
-                let e1 = u2 - u0; //c-a
-
-                let n = cross(e0,e1);// normal
-                let d = -dot(u0, n);
-
-
-                var res = false;
-
-                let n_tmp = cross(u0 - r.origin, r.direction);
-                let t = dot(u0 - r.origin, n)/dot(n, r.direction);
-
-                let b = dot(n_tmp, e1) /dot(n, r.direction);
-                let g = -dot(n_tmp, e0) / dot(n, r.direction);
-                let intersection_point = r.origin + t* r.direction;
-                let barycentric = calculateBarycentricCoordinates(u0,u1,u2,intersection_point);
-                let interpolatedNormal = barycentric.x*n0 + barycentric.y*n1 + barycentric.z*n2;
-
-                if ((t < r.tmax) & (t > r.tmin)){
-                    res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);}
-                    if (res){
-
-                         if ((*hit).dist > 0) {
-                             (*hit).dist = min((*hit).dist, t);
-                         }
-                         else {
-                             (*hit).dist = t;
-                         }
-                         (*hit).position = r.origin + (*hit).dist* r.direction;
-
-
-                         (*hit).normal = normalize(interpolatedNormal);
-
-                        }
-
-                        return res;
-                     }
+            return res;
+        }
 
 
 
 
-            fn calculateBarycentricCoordinates(v0: vec3<f32>,v1: vec3<f32>,v2: vec3<f32>,point: vec3<f32>) -> vec3<f32> {
-                let edge0 = v1 - v0;
-                let edge1 = v2 - v0;
-                let v0ToPoint = point - v0;
+        fn calculateBarycentricCoordinates(v0: vec3<f32>,v1: vec3<f32>,v2: vec3<f32>,point: vec3<f32>) -> vec3<f32> {
+            let edge0 = v1 - v0;
+            let edge1 = v2 - v0;
+            let v0ToPoint = point - v0;
 
-                let dot00 = dot(edge0, edge0);
-                let dot01 = dot(edge0, edge1);
-                let dot02 = dot(edge0, v0ToPoint);
-                let dot11 = dot(edge1, edge1);
-                let dot12 = dot(edge1, v0ToPoint);
+            let dot00 = dot(edge0, edge0);
+            let dot01 = dot(edge0, edge1);
+            let dot02 = dot(edge0, v0ToPoint);
+            let dot11 = dot(edge1, edge1);
+            let dot12 = dot(edge1, v0ToPoint);
 
-                let invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+            let invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
 
-                let b = (dot11 * dot02 - dot01 * dot12) * invDenom;
-                let g = (dot00 * dot12 - dot01 * dot02) * invDenom;
-                let a = 1.0 - b - g;
+            let b = (dot11 * dot02 - dot01 * dot12) * invDenom;
+            let g = (dot00 * dot12 - dot01 * dot02) * invDenom;
+            let a = 1.0 - b - g;
 
-                return vec3<f32>(a, b, g);
-            }
+            return vec3<f32>(a, b, g);
+        }
 
-            fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
+        fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
 
-                for (var i: u32 = 0 ; i < arrayLength(&meshFaces); i++) {
-                    var res = intersect_triangle(*r, hit, meshFaces[i], mIndices[i]);
-                    if (res){
-                        (*r).tmax = min((*hit).dist,(*r).tmax);
+            for (var i: u32 = 0 ; i < arrayLength(&meshFaces); i++) {
+                var res = intersect_triangle(*r, hit, meshFaces[i], mIndices[i]);
+                if (res){
+                    (*r).tmax = min((*hit).dist,(*r).tmax);
 
-                        (*hit).has_hit = true;
-                        (*hit).shader = 1.0;
+                    (*hit).has_hit = true;
+                    (*hit).shader = 1.0;
 
-                        if ((*r).tmax == (*hit).dist) {
+                    if ((*r).tmax == (*hit).dist) {
 
-                            (*hit).color =  mColors[mIndices[i]] +mEmissions[mIndices[i]];
-                            (*hit).emission= mEmissions[mIndices[i]];
-                            (*hit).diffuse = mColors[mIndices[i]];
+                        (*hit).color =  mColors[mIndices[i]] +mEmissions[mIndices[i]];
+                        (*hit).emission= mEmissions[mIndices[i]];
+                        (*hit).diffuse = mColors[mIndices[i]];
 
-                        }
-                       }
+                    }
+                    }
 
-                      }
-                return (*hit).has_hit;
-            }
-
-
-
+                    }
+            return (*hit).has_hit;
+        }
 
         @fragment
          fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f{
@@ -298,21 +292,18 @@
             var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0.0);
 
 
-                for(var i = 0; i<max_depth;i++){
-                    if(intersect_scene(&r, &hit)){
-                       result+= shade(&r,&hit);
-                    }
-                    else {
-                       result+= bgcolor.rgb;
-                       break;
+            for(var i = 0; i<max_depth;i++){
+                if(intersect_scene(&r, &hit)){
+                    result+= shade(&r,&hit);
+                }
+                else {
+                    result+= bgcolor.rgb;
+                    break;
                 }
                 if (hit.has_hit) {
                     break;
                 }
             }
-
-
-
 
             return vec4f(pow(result, vec3f(1.0/uniforms.camera_const)), bgcolor.a); }
   </script>

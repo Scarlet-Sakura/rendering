@@ -9,6 +9,7 @@
     @group(0) @binding(4) var<storage,read> mIndices: array<u32>;
     @group(0) @binding(5) var<storage,read> mColors: array<vec3f>;
     @group(0) @binding(6) var<storage,read> mEmissions: array<vec3f>;
+
     struct Uniforms {
         aspect_ratio: f32, camera_const: f32,
     };
@@ -23,7 +24,7 @@
     struct VSOut {
         @builtin(position) position: vec4f,
         @location(0) coords : vec2f,
-        };
+    };
 
     @vertex
      fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut{
@@ -32,7 +33,7 @@
         vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
         vsOut.coords = pos[VertexIndex];
         return vsOut;
-        }
+    }
 
     struct HitInfo {
         has_hit: bool,
@@ -41,14 +42,14 @@
         normal: vec3<f32>,
         color: vec3<f32>,
         texcoords: vec2<f32>,
-        };
+    };
 
     struct Ray {
         origin: vec3<f32>,
         direction: vec3<f32>,
         tmin: f32,
         tmax: f32,
-        };
+    };
 
     struct Triangle {
         vertex1: vec3<f32>,
@@ -56,7 +57,7 @@
         vertex3: vec3<f32>,
         color: vec3<f32>,
 
-        };
+    };
 
 
     struct Light {
@@ -64,7 +65,7 @@
         intensity: f32,
         lightDist: f32,
         direction: vec3f
-        };
+    };
 
     fn sample_light(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
         let ambient = 0.1 * (*hit).color;
@@ -74,30 +75,6 @@
         let diffuse = 0.9 * l_r;
         return ambient + diffuse;
     }
-
-    /*fn lambertian(r: ptr<function, Ray>, hit:ptr<function,HitInfo>)->vec3f{
-        var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec4<f32>(0.0),vec2<f32>(0.0));
-        var ray: Ray;
-        var light = sample_light((*hit).position);
-
-        (ray).direction = light.direction;
-        (ray).tmin = 1e-4;
-        (ray).tmax= 1e2;
-        (ray).origin = ((*hit).position);
-        var fragColor = vec3f(0.0);
-        var illumination = max(0.0,dot((*hit).normal,light.direction))/(pow(light.lightDist,2));
-        var res = intersect_scene(&ray,&shadow_hit);
-
-        var ambient = 0.1*vec3f((*hit).color);
-        var diffuse = 0.9*vec3f((*hit).color);
-
-        if(res){
-         fragColor = ambient;
-        }
-        else{
-         fragColor =ambient + diffuse*illumination;}
-         return fragColor;
-        }*/
 
     fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
         const eye_point = vec3<f32>(277.0, 275.0, -570.0);
@@ -113,107 +90,100 @@
         let w = normalize(q);
 
         return Ray(eye_point, w, 0.0, 1.0);
-        }
+    }
 
 
-        fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, face: vec3u, mIndex: u32) -> bool {
-            let u0 = vPositions[face[0]];
-            let u1 = vPositions[face[1]];
-            let u2 = vPositions[face[2]];
+    fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, face: vec3u, mIndex: u32) -> bool {
+        let u0 = vPositions[face[0]];
+        let u1 = vPositions[face[1]];
+        let u2 = vPositions[face[2]];
 
-            let n0 = vNormals[face[0]];
-            let n1 = vNormals[face[1]];
-            let n2 = vNormals[face[2]];
-            //dot(e0,cross(r.direction,e1))
+        let n0 = vNormals[face[0]];
+        let n1 = vNormals[face[1]];
+        let n2 = vNormals[face[2]];
+        //dot(e0,cross(r.direction,e1))
 
-            let e0 = u1 - u0; //b-a
-            let e1 = u2 - u0; //c-a
+        let e0 = u1 - u0; //b-a
+        let e1 = u2 - u0; //c-a
 
-            let n = cross(e0,e1);// normal
-            let d = -dot(u0, n);
-
-
-            var res = false;
-
-            let n_tmp = cross(u0 - r.origin, r.direction);
-            let t = dot(u0 - r.origin, n)/dot(n, r.direction);
-            let b = dot(n_tmp, e1) /dot(n, r.direction);
-            let g = -dot(n_tmp, e0) / dot(n, r.direction);
-            let intersection_point = r.origin + t* r.direction;
-            let barycentric = calculateBarycentricCoordinates(u0,u1,u2,intersection_point);
-            let interpolatedNormal = barycentric.x*n0 + barycentric.y*n1 + barycentric.z*n2;
-
-            if ((t < r.tmax) & (t > r.tmin)){
-                res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);}
-                if (res){
-
-                     if ((*hit).dist > 0) {
-                         (*hit).dist = min((*hit).dist, t);
-                     }
-                     else {
-                         (*hit).dist = t;
-                     }
-                     (*hit).position = r.origin + (*hit).dist* r.direction;
+        let n = cross(e0,e1);// normal
+        let d = -dot(u0, n);
 
 
-                    (*hit).normal = normalize(interpolatedNormal);
+        var res = false;
 
+        let n_tmp = cross(u0 - r.origin, r.direction);
+        let t = dot(u0 - r.origin, n)/dot(n, r.direction);
+        let b = dot(n_tmp, e1) /dot(n, r.direction);
+        let g = -dot(n_tmp, e0) / dot(n, r.direction);
+        let intersection_point = r.origin + t* r.direction;
+        let barycentric = calculateBarycentricCoordinates(u0,u1,u2,intersection_point);
+        let interpolatedNormal = barycentric.x*n0 + barycentric.y*n1 + barycentric.z*n2;
+
+        if ((t < r.tmax) & (t > r.tmin)){
+            res = (b >= 0.0 && g >= 0.0 && b + g <= 1.0);}
+            if (res){
+
+                    if ((*hit).dist > 0) {
+                        (*hit).dist = min((*hit).dist, t);
                     }
-
-                    return res;
-                 }
-
-
-
-
-        fn calculateBarycentricCoordinates(v0: vec3<f32>,v1: vec3<f32>,v2: vec3<f32>,point: vec3<f32>) -> vec3<f32> {
-            let edge0 = v1 - v0;
-            let edge1 = v2 - v0;
-            let v0ToPoint = point - v0;
-
-            let dot00 = dot(edge0, edge0);
-            let dot01 = dot(edge0, edge1);
-            let dot02 = dot(edge0, v0ToPoint);
-            let dot11 = dot(edge1, edge1);
-            let dot12 = dot(edge1, v0ToPoint);
-
-            let invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
-
-            let b = (dot11 * dot02 - dot01 * dot12) * invDenom;
-            let g = (dot00 * dot12 - dot01 * dot02) * invDenom;
-            let a = 1.0 - b - g;
-
-            return vec3<f32>(a, b, g);
-        }
-
-        fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
-            (*hit).has_hit = false;
-            (*r).tmin = 1e-4;
-            (*r).tmax = 1e20;
-            var ray: Ray = (*r);
-
-
-            for (var i: u32 = 0 ; i < arrayLength(&meshFaces); i++) {
-                let res = intersect_triangle(*r, hit, meshFaces[i], mIndices[i]);
-                if (res){
-                    (*r).tmax = min((*hit).dist,(*r).tmax);
-
-                    (*hit).has_hit = true;
-
-                    if ((*r).tmax == (*hit).dist) {
-
-                        (*hit).color =  mColors[mIndices[i]] + mEmissions[mIndices[i]];
-
-
+                    else {
+                        (*hit).dist = t;
                     }
-                   }
+                    (*hit).position = r.origin + (*hit).dist* r.direction;
 
-                  }
-            return (*hit).has_hit;
+
+                (*hit).normal = normalize(interpolatedNormal);
+
+                }
+
+                return res;
+    }
+
+    fn calculateBarycentricCoordinates(v0: vec3<f32>,v1: vec3<f32>,v2: vec3<f32>,point: vec3<f32>) -> vec3<f32> {
+        let edge0 = v1 - v0;
+        let edge1 = v2 - v0;
+        let v0ToPoint = point - v0;
+
+        let dot00 = dot(edge0, edge0);
+        let dot01 = dot(edge0, edge1);
+        let dot02 = dot(edge0, v0ToPoint);
+        let dot11 = dot(edge1, edge1);
+        let dot12 = dot(edge1, v0ToPoint);
+
+        let invDenom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+
+        let b = (dot11 * dot02 - dot01 * dot12) * invDenom;
+        let g = (dot00 * dot12 - dot01 * dot02) * invDenom;
+        let a = 1.0 - b - g;
+
+        return vec3<f32>(a, b, g);
+    }
+
+    fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool {
+        (*hit).has_hit = false;
+        (*r).tmin = 1e-4;
+        (*r).tmax = 1e20;
+        var ray: Ray = (*r);
+
+
+        for (var i: u32 = 0 ; i < arrayLength(&meshFaces); i++) {
+            let res = intersect_triangle(*r, hit, meshFaces[i], mIndices[i]);
+            if (res){
+                (*r).tmax = min((*hit).dist,(*r).tmax);
+
+                (*hit).has_hit = true;
+
+                if ((*r).tmax == (*hit).dist) {
+
+                    (*hit).color =  mColors[mIndices[i]] + mEmissions[mIndices[i]];
+
+                }
+            }
+
         }
-
-
-
+        return (*hit).has_hit;
+    }
 
     @fragment
      fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f{
@@ -227,23 +197,18 @@
         var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0));
 
 
-            for(var i = 0; i<max_depth;i++){
-                if(intersect_scene(&r, &hit)){
-                   result+= (hit).color;
-                }
-                else {
-                   result+= bgcolor.rgb;
-                   break;
-
-
+        for(var i = 0; i<max_depth;i++){
+            if(intersect_scene(&r, &hit)){
+                result+= (hit).color;
+            }
+            else {
+                result+= bgcolor.rgb;
+                break;
             }
             if (hit.has_hit) {
                 break;
-            }
+            }   
         }
-
-
-
 
         return vec4f(pow(result, vec3f(1.0/uniforms.camera_const)), bgcolor.a); }
   </script>
@@ -251,8 +216,8 @@
   <head>
     <title>Week 5.4</title>
     <script type="text/javascript" src="week5.4.js"></script>
-    <script type="text/javascript" src="common\MV.js"></script>
-    <script type="text/javascript" src="common\OBJParser.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
+    <script type="text/javascript" src="..\common\OBJParser.js"></script>
   </head>
 
   <body>

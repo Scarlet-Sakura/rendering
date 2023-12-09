@@ -204,7 +204,7 @@
 
         var fragColor = vec3f(0.0);
 
-        var illumination = max(0.0,dot((*hit).normal,light.direction))/ (distance * distance);
+        var illumination = light.intensity*max(0.0,dot((*hit).normal,light.direction))/3.14;
 
         var res = intersect_scene(&ray,&shadow_hit);
         var ambient = vec3f(0.1*(*hit).color.rgb[0],0.1*(*hit).color.rgb[1],0.1*(*hit).color.rgb[2]);
