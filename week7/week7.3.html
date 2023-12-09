@@ -83,6 +83,8 @@
         diffuse:vec3<f32>,
         shader:i32,
         refraction:f32,
+        emit_flagg: bool,
+        rgb_factor: vec3f,
     };
 
     struct Ray {
@@ -150,7 +152,7 @@
         var normals = sample(mLights[triangle_index],seed).normal;
 
         var light_direction = normalize(point - pos);
-       
+
         let emission = vColors[indices[mLights[triangle_index]][3]].emission;
         let face = indices[mLights[triangle_index]];
         let intensity = max((dot(-light_direction, normals)),0) * emission * area*f32(arrayLength(&mLights));
@@ -158,7 +160,7 @@
         let distance = length(point - pos);
 
         return Light(point,intensity/pow(distance,2), distance, light_direction);
-    
+
     }
 
     //shade based on area etc of the emissive triangles
@@ -199,33 +201,56 @@
     }
 
     fn area_shade(r: ptr<function, Ray>, hit:ptr<function,HitInfo>,seed: ptr<function,u32>)->vec3f{
-        var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0);
-        var ray: Ray;
-
+        var shadow_hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0,false,vec3f(1.0));
         var light = random_area((*hit).position,seed);
-
+        var ray: Ray;
         (ray).direction = light.direction;
         (ray).tmin = 1e-4;
         (ray).tmax= light.lightDist -1e-4;
         (ray).origin = ((*hit).position);
-        var fragColor = vec3f(0.0);
 
-        var illumination = (light.intensity)*max(0.0,dot((*hit).normal,light.direction));
         var res = intersect_scene(&ray,&shadow_hit);
-         if(res){
-           fragColor = (*hit).emission;
+        var emission = (*hit).emission;
+        //
+        if(res){
+            return emission;
         }
-        else{
-           fragColor = (*hit).emission +  (((*hit).diffuse)/3.14)*illumination;
-        }
-      return fragColor;
 
+        //sample hemisphere
+        var ks1 = rnd(seed);
+        var ks2 = rnd(seed);
+        var brdf = 1/3.14;
+        //generate random directions
+        var v = spherical_direction(sin(acos(sqrt(1-ks1))),cos(acos(sqrt(1-ks1))),2*ks2/brdf);
+        var w_t = rotate_to_normal((*hit).normal,v);
+
+        (*r).direction = w_t;
+        (*r).tmin = 1e-4;
+        (*r).tmax= 1e20;
+        (*r).origin = ((*hit).position);
+
+        (*hit).rgb_factor = (*hit).diffuse*(*hit).rgb_factor;
+        var fragColor = vec3f(0.0);
+        var illumination = (light.intensity)*max(0.0,dot(normalize((*hit).normal),light.direction));
+
+
+        //direct illumination
+        if((*hit).emit_flagg){
+            (*hit).emit_flagg = false;
+            fragColor = (*hit).diffuse*brdf*illumination + emission;
+        }
+        //indirect
+        else{
+            fragColor = (*hit).diffuse*brdf*illumination;
+        }
+
+        return fragColor;
     }
 
     fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>,seed: ptr<function,u32>) -> vec3f{
 
         switch (*hit).shader {
-            
+
             case 0 { return directional_light(r, hit); }
             case 1 { return area_shade(r, hit,seed); }
             case default { return (*hit).color; }
@@ -290,14 +315,15 @@
             else {
                 (*hit).dist = t;
             }
+            (*hit).rgb_factor = vec3f(1.0);
             (*hit).diffuse = vColors[indices[mIndex][3]].color;
             (*hit).emission= vColors[indices[mIndex][3]].emission;
             (*hit).color = vColors[indices[mIndex][3]].color + vColors[indices[mIndex][3]].emission;
             (*hit).position = r.origin + (*hit).dist* r.direction;
             (*hit).normal = normalize(interpolatedNormal);
             (*hit).shader = 1;
-            
-            
+
+
         }
 
         return res;
@@ -420,12 +446,34 @@
         if(intersect_min_max(r)){
             if (res){
                 (*r).tmax = min((*hit).dist,(*r).tmax);
-                (*hit).has_hit = true; 
+                (*hit).has_hit = true;
             }
         }
 
         return (*hit).has_hit;
     }
+
+    fn rotate_to_normal(normal: vec3f, v: vec3f) -> vec3f
+    {
+      let signbit = sign(normal.z + 1.0e-16f);
+      let a = -1.0f/(1.0f + abs(normal.z));
+      let b = normal.x*normal.y*a;
+
+      return vec3f(1.0f + normal.x*normal.x*a, b, -signbit*normal.x)*v.x
+
+        + vec3f(signbit*b, signbit*(1.0f + normal.y*normal.y*a), -normal.y)*v.y
+
+        + normal*v.z;
+    }
+
+    fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: f32) -> vec3f
+    {
+      let sin_phi = sin(phi);
+      let cos_phi = cos(phi);
+
+      return vec3f(sin_theta*cos_phi, sin_theta*sin_phi, cos_theta);
+    }
+
     fn tea(val0: u32, val1: u32) -> u32
 
     {
@@ -462,7 +510,7 @@
 
     @fragment
     fn main_fs(@builtin(position) fragcoord: vec4f,@location(0) coords: vec2f) -> FSOut{
-
+        var test = jitters[0];
         let launch_idx = u32(fragcoord.y)*u32(uniforms.width) + u32(fragcoord.x);
         var t = tea(launch_idx, u32(uniforms.frame));
         let jitter = vec2f(rnd(&t), rnd(&t))/f32(uniforms.height);
@@ -473,27 +521,27 @@
         let uv = vec2f(coords.x*0.5f, coords.y*0.5f);
         var r = get_camera_ray(uv,uniforms.camera_const);
 
-        var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0);
+        var hit: HitInfo = HitInfo(false,-1.0, vec3<f32>(0.0), vec3<f32>(0.0), vec3<f32>(0.0),vec2<f32>(0.0),vec3<f32>(0.0),vec3<f32>(0.0),0,1.0,false,vec3f(1.0));
         for (var i = 0; i < i32(uniforms.subdivs); i++) {
             for (var j = 0; j < i32(uniforms.subdivs); j++) {
 
                 let idx = (i * i32(uniforms.subdivs) + j);
-                let jitter_vec = jitters[idx];
+                let jitter_vec = jitter[idx];
                 let subpixel_uv = jitter_vec + uv;
 
                 var r = get_camera_ray(subpixel_uv, uniforms.camera_const);
 
                 for (var k = 0; k < max_depth; k++) {
                     if (intersect_scene(&r, &hit)) {
-                        result += shade(&r,&hit,&t);
+                        result += shade(&r,&hit,&t)*(hit).rgb_factor;
                             }
                     else { result += bgcolor.rgb; break; }
                         if (hit.has_hit) { break; }
                 }
             }
         }
-        
-        
+
+
         // Progressive update of image
         let curr_sum = textureLoad(my_texture, vec2u(fragcoord.xy), 0).rgb*f32(uniforms.frame);
         result /= f32(uniforms.subdivs * uniforms.subdivs);
@@ -507,8 +555,14 @@
     <title>Week 7.3</title>
     <script type="text/javascript" src="week7.3.js"></script>
     <script type="text/javascript" src="..\common\MV.js"></script>
-    <script type="text/javascript" src="..\common\OBJParser_interleaved.js"></script>
-    <script type="text/javascript" src="..\common\BspTree_interleaved.js"></script>
+    <script
+      type="text/javascript"
+      src="..\common\OBJParser_interleaved.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="..\common\BspTree_interleaved.js"
+    ></script>
     <script type="text/javascript" src="..\common\Aabb.js"></script>
   </head>
   <body>

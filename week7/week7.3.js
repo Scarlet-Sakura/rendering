@@ -9,9 +9,15 @@ var camera_const = 1.0;
 var width = 512;
 var height = 512;
 var frame = 0.0;
- // Initialize the subdivision level
+// Initialize the subdivision level
 var subdivisionLevel = 1;
-var uniforms = new Float32Array([width, height, camera_const, frame,subdivisionLevel]);
+var uniforms = new Float32Array([
+  width,
+  height,
+  camera_const,
+  frame,
+  subdivisionLevel,
+]);
 
 window.onload = function () {
   main();
@@ -61,13 +67,11 @@ async function main() {
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
-  
   let jitter = new Float32Array(200);
   const jitterBuffer = device.createBuffer({
     size: jitter.byteLength,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
   });
-
 
   const buffers = {
     attribs: null,
@@ -100,9 +104,9 @@ async function main() {
         resource: { buffer: uniformBuffer },
       },
       { binding: 1, resource: textures.renderDst.createView() },
-      { 
-        binding:2, 
-        resource: { buffer: jitterBuffer }
+      {
+        binding: 2,
+        resource: { buffer: jitterBuffer },
       },
     ],
   });
@@ -222,39 +226,38 @@ async function main() {
   const incrementButton = document.getElementById("incrementButton");
   const decrementButton = document.getElementById("decrementButton");
 
- // Initialize the subdivision level
- let subdivisionLevel = 1;
+  // Initialize the subdivision level
+  let subdivisionLevel = 1;
 
- // Update the subdivision level display
- function updateSubdivisionLevel() {
-   subdivisionLevelElement.textContent = subdivisionLevel;
-   const numericValue = parseInt(subdivisionLevelElement.textContent, 10); // Use parseInt to parse as an integer
+  // Update the subdivision level display
+  function updateSubdivisionLevel() {
+    subdivisionLevelElement.textContent = subdivisionLevel;
+    const numericValue = parseInt(subdivisionLevelElement.textContent, 10); // Use parseInt to parse as an integer
 
-   console.log(numericValue); // This will log the number 42
-   compute_jitters(jitter, 1 / canvas.height, numericValue);
-   
- }
+    console.log(numericValue); // This will log the number 42
+    //compute_jitters(jitter, 1 / canvas.height, numericValue);
+    animate();
+  }
 
- // Event listener for the increment button
- incrementButton.addEventListener("click", () => {
-   if (subdivisionLevel < 10) {
-     subdivisionLevel++; // You can adjust the maximum level if needed.
-     updateSubdivisionLevel();
-     // Call a function to update jitter vectors and perform ray tracing with the new level.
-   }
- });
+  // Event listener for the increment button
+  incrementButton.addEventListener("click", () => {
+    if (subdivisionLevel < 10) {
+      subdivisionLevel++; // You can adjust the maximum level if needed.
+      updateSubdivisionLevel();
+      // Call a function to update jitter vectors and perform ray tracing with the new level.
+    }
+  });
 
- // Event listener for the decrement button
- decrementButton.addEventListener("click", () => {
-   if (subdivisionLevel >= 1) {
-     subdivisionLevel--;
-     updateSubdivisionLevel();
-     // Call a function to update jitter vectors and perform ray tracing with the new level.
-   }
- });
+  // Event listener for the decrement button
+  decrementButton.addEventListener("click", () => {
+    if (subdivisionLevel >= 1) {
+      subdivisionLevel--;
+      updateSubdivisionLevel();
+      // Call a function to update jitter vectors and perform ray tracing with the new level.
+    }
+  });
 
- updateSubdivisionLevel();
-
+  updateSubdivisionLevel();
 
   function compute_jitters(jitter, pixelsize, subdivs) {
     const step = pixelsize / subdivs;
@@ -269,7 +272,6 @@ async function main() {
           jitter[idx + 1] = (Math.random() + i) * step - pixelsize * 0.5;
         }
     }
-
   }
 
   async function render(device, context, pipeline, bindGroup, bindGroup2) {

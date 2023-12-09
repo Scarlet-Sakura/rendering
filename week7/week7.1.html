@@ -127,7 +127,7 @@
         let u2 = attributes[face[2]].iPositions;
 
         var samples: Samples;
-      
+
         samples.sampledPoint = (u0 + u1 + u2)/3.0;
         samples.sampledArea =  0.5 * length(cross(u1 - u0, u2 - u0));
 
@@ -198,7 +198,7 @@
     fn shade(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f{
 
         switch (*hit).shader {
-            
+
             case 0 { return directional_light(r, hit); }
             case 1 { return area_shade(r, hit); }
             case default { return (*hit).color; }
@@ -269,8 +269,8 @@
             (*hit).position = r.origin + (*hit).dist* r.direction;
             (*hit).normal = normalize(interpolatedNormal);
             (*hit).shader = 1;
-            
-            
+
+
         }
 
         return res;
@@ -393,7 +393,7 @@
         if(intersect_min_max(r)){
             if (res){
                 (*r).tmax = min((*hit).dist,(*r).tmax);
-                (*hit).has_hit = true; 
+                (*hit).has_hit = true;
             }
         }
 
@@ -435,7 +435,7 @@
 
     @fragment
     fn main_fs(@builtin(position) fragcoord: vec4f,@location(0) coords: vec2f) -> FSOut{
-
+        var test = jitters[0];
         let launch_idx = u32(fragcoord.y)*u32(uniforms.width) + u32(fragcoord.x);
         var t = tea(launch_idx, u32(uniforms.frame));
         let jitter = vec2f(rnd(&t), rnd(&t))/f32(uniforms.height);
@@ -451,10 +451,10 @@
             for (var j = 0; j < i32(uniforms.subdivs); j++) {
 
                 let idx = (i * i32(uniforms.subdivs) + j);
-                let jitter_vec = jitters[idx];
+                let jitter_vec = jitter[idx];
                 let subpixel_uv = jitter_vec + uv;
 
-                var r = get_camera_ray(subpixel_uv, uniforms.camera_const);
+                r = get_camera_ray(subpixel_uv, uniforms.camera_const);
 
                 for (var k = 0; k < max_depth; k++) {
                     if (intersect_scene(&r, &hit)) {
@@ -465,8 +465,8 @@
                 }
             }
         }
-        
-        
+
+
         // Progressive update of image
         let curr_sum = textureLoad(my_texture, vec2u(fragcoord.xy), 0).rgb*f32(uniforms.frame);
         result /= f32(uniforms.subdivs * uniforms.subdivs);
@@ -480,8 +480,14 @@
     <title>Week 7.1</title>
     <script type="text/javascript" src="week7.1.js"></script>
     <script type="text/javascript" src="..\common\MV.js"></script>
-    <script type="text/javascript" src="..\common\OBJParser_interleaved.js"></script>
-    <script type="text/javascript" src="..\common\BspTree_interleaved.js"></script>
+    <script
+      type="text/javascript"
+      src="..\common\OBJParser_interleaved.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="..\common\BspTree_interleaved.js"
+    ></script>
     <script type="text/javascript" src="..\common\Aabb.js"></script>
   </head>
   <body>

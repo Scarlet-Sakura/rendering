@@ -1,5 +1,5 @@
 "use strict";
-var obj_filename = "../objects/CornellBoxWithBlocks.obj";
+var obj_filename = "../objects/CornellBox.obj";
 
 var g_objDoc = null; // Info parsed from OBJ file
 var g_drawingInfo = null; // Info for drawing the 3D model with WebGL
@@ -9,6 +9,7 @@ var camera_const = 1.0;
 var width = 512;
 var height = 512;
 var frame = 0.0;
+
 // Initialize the subdivision level
 var subdivisionLevel = 1;
 var uniforms = new Float32Array([
