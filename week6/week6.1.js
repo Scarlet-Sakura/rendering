@@ -1,5 +1,5 @@
 "use strict";
-var obj_filename = "objects/bunny.obj";
+var obj_filename = "../objects/bunny.obj";
 
 var g_objDoc = null; // Info parsed from OBJ file
 var g_drawingInfo = null; // Info for drawing the 3D model with WebGL
@@ -7,7 +7,7 @@ var g_drawingInfo = null; // Info for drawing the 3D model with WebGL
 //changing camera constant & aspect ratio
 var camera_const = 3.5;
 var aspect_ratio = 800 / 450;
-var subdivs = 1;
+var subdivisionLevel = 1;
 var sphere_option = 1.0;
 var object_option = 1.0;
 var uniforms = new Float32Array([
@@ -15,7 +15,7 @@ var uniforms = new Float32Array([
   camera_const,
   sphere_option,
   object_option,
-  subdivs,
+  subdivisionLevel
 ]);
 
 window.onload = function () {
@@ -158,6 +158,9 @@ async function main() {
     return bindGroup;
   }
 
+  //initialize scene
+  animate();
+
   function animate() {
     if (!g_drawingInfo && g_objDoc && g_objDoc.isMTLComplete()) {
       // OBJ and all MTLs are available
@@ -168,9 +171,9 @@ async function main() {
       requestAnimationFrame(animate);
       return;
     }
-    uniforms[5] = subdivs;
+    uniforms[5] = subdivisionLevel;
     //console.log(uniforms[5]);
-    compute_jitters(jitter, 1 / canvas.height, subdivs);
+    compute_jitters(jitter, 1 / canvas.height, subdivisionLevel);
 
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
     device.queue.writeBuffer(jitterBuffer, 0, jitter);
@@ -182,9 +185,6 @@ async function main() {
   const incrementButton = document.getElementById("incrementButton");
   const decrementButton = document.getElementById("decrementButton");
 
-  // Initialize the subdivision level
-  let subdivisionLevel = 1;
-
   // Update the subdivision level display
   function updateSubdivisionLevel() {
     subdivisionLevelElement.textContent = subdivisionLevel;
@@ -192,7 +192,9 @@ async function main() {
 
     console.log(numericValue); // This will log the number 42
 
-    requestAnimationFrame(animate);
+    compute_jitters(jitter, 1 / canvas.height, numericValue);
+
+    animate();
   }
 
   // Event listener for the increment button
@@ -206,7 +208,7 @@ async function main() {
 
   // Event listener for the decrement button
   decrementButton.addEventListener("click", () => {
-    if (subdivisionLevel >= 1) {
+    if (subdivisionLevel > 1) {
       subdivisionLevel--;
       updateSubdivisionLevel();
       // Call a function to update jitter vectors and perform ray tracing with the new level.

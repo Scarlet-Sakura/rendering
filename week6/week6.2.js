@@ -188,6 +188,8 @@ async function main() {
 
     return bindGroup;
   }
+  //initialize scene
+  animate();
 
   function animate() {
     if (!g_drawingInfo && g_objDoc && g_objDoc.isMTLComplete()) {
@@ -221,7 +223,9 @@ async function main() {
 
     console.log(numericValue); // This will log the number 42
 
-    requestAnimationFrame(animate);
+    compute_jitters(jitter, 1 / canvas.height, numericValue);
+
+    animate();
   }
 
   // Event listener for the increment button

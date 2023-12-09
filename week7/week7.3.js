@@ -278,7 +278,7 @@ async function main() {
     // Create a render pass in a command buffer and submit it
     frame += 1;
     uniforms[3] = frame;
-    console.log(frame);
+    console.log(frame);   
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
     const encoder = device.createCommandEncoder();

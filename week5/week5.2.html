@@ -62,7 +62,7 @@
 
         var source = vec3<f32>(0.0,1.0,0.0);
         var dir = direction;
-        var distance = 0.2;
+        var distance = 0.0;
         var light = Light(-1.0*dir, intensity, distance, dir);
 
         return light;
@@ -75,10 +75,10 @@
 
         (ray).direction = light.direction;
         (ray).tmin = 1e-4;
-        (ray).tmax= 1e2;
+        (ray).tmax= light.lightDist;
         (ray).origin = ((*hit).position);
         var fragColor = vec3f(0.0);
-        var illumination = max(0.0,dot((*hit).normal,light.direction))/(pow(light.lightDist,2));
+        var illumination = light.intensity*max(0.0,dot((*hit).normal,light.direction))/3.14;
         var res = intersect_scene(&ray,&shadow_hit);
         var ambient = 0.1*vec3f((*hit).color);
         var diffuse = 0.9*vec3f((*hit).color);
@@ -175,7 +175,7 @@
 
     @fragment
      fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f{
-        const max_depth = 3;
+        const max_depth = 10;
         const bgcolor = vec4f(0.1,0.3,0.6,1.0);
         var result = vec3<f32>(0.0, 0.0, 0.0);
 
@@ -191,7 +191,7 @@
                 }
                 else {
                    result+= bgcolor.rgb;
-
+                   break;
                 }
                 if (hit.has_hit) {
                     break;
@@ -205,8 +205,8 @@
   <head>
     <title>Week 5.2</title>
     <script type="text/javascript" src="week5.2.js"></script>
-    <script type="text/javascript" src="common\MV.js"></script>
-    <script type="text/javascript" src="common\OBJParser.js"></script>
+    <script type="text/javascript" src="..\common\MV.js"></script>
+    <script type="text/javascript" src="..\common\OBJParser.js"></script>
   </head>
 
   <body>
