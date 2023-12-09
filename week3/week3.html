@@ -272,8 +272,8 @@
 
         return fragColor;
 
-
     }
+
     fn get_camera_ray(uv: vec2<f32>, camera_const : f32) -> Ray {
         const eye_point = vec3<f32>(2.0, 1.5, 2.0);
         const camera_pos = vec3<f32>(0.0, 0.0, 0.0);
@@ -327,6 +327,7 @@
         return res;
 
     }
+    
     fn intersect_plane(r: Ray, hit:ptr<function,HitInfo>,position: vec3f, normal:vec3f)->bool{
         let d = -dot(position, normal);
         let t = -(dot(r.origin,normal) + d)/dot(normal,r.direction);

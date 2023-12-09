@@ -41,7 +41,7 @@ async function main() {
     },
   });
 
-  var camera_const = 1.0;
+  var camera_const = 1.5;
   var aspect_ratio = canvas.width / canvas.height;
   var sphere_option, object_option, texture_option;
  // Initialize the subdivision level
@@ -102,6 +102,7 @@ async function main() {
     isTextureEnabled = !isTextureEnabled; // Toggle the state
     uniforms[4] = isTextureEnabled ? 1 : 0; // Set the value based on the state
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    animate();
   });
 
  
@@ -200,12 +201,8 @@ async function main() {
     bindGroups.push(bindGroup);
   }
 
-  // Create event listeners for the select elements
-  var addressMenu = document.getElementById("addressMenu");
-  var filterMenu = document.getElementById("filterMenu");
-
-  addressMenu.addEventListener("change", animate);
-  filterMenu.addEventListener("change", animate);
+  //initialize scene
+  animate();
 
   function animate() {
     var address = document.getElementById("addressMenu").value;
@@ -251,6 +248,8 @@ async function main() {
     console.log(numericValue); // This will log the number 42
     
     compute_jitters(jitter, 1 / canvas.height, numericValue);
+
+    animate();
     
   }
 
@@ -265,7 +264,7 @@ async function main() {
 
   // Event listener for the decrement button
   decrementButton.addEventListener("click", () => {
-    if (subdivisionLevel >= 1) {
+    if (subdivisionLevel > 1) {
       subdivisionLevel--;
       updateSubdivisionLevel();
       // Call a function to update jitter vectors and perform ray tracing with the new level.
