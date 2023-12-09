@@ -73,144 +73,119 @@
        
     fn torIntersect( ray:Ray, hit:ptr<function,HitInfo>, tor:vec2f ) ->bool
     {
- 
-        let R2 = tor.x*tor.x;
-        let r2 = tor.y*tor.y;
+        //a method for finding the intersections using Cardanos method
+        var po = 1.0;
+        var Ra2 = tor.x*tor.x;
+        var ra2 = tor.y*tor.y;
+        var m = dot(ray.origin,ray.origin);
+        var n = dot(ray.origin,ray.direction);
+        var k = (m + Ra2 - ra2)/2.0;
+        var k3 = n;
+        var k2 = n*n - Ra2*dot(ray.direction.xy,ray.direction.xy) + k;
+        var k1 = n*k - Ra2*dot(ray.direction.xy,ray.origin.xy);
+        var k0 = k*k - Ra2*dot(ray.origin.xy,ray.origin.xy);
 
-        let o = ray.origin;
-        let dir = ray.direction;
-
-        //coefficients I get when replacing the ray intersect equation
-        //in the implicit equation of the torus
-
-        let c2 = dot(o,o);
-        let c1 = 2*dot(o,dir);
-        let c0 = dot(dir,dir) + R2 -r2;
-
-        let k2 = 4*R2*(o.x*o.x + o.y*o.y);
-        let k1 = 8*R2*(o.x*dir.x + o.y*dir.y);
-        let k0 = 4*(dir.x*dir.x + dir.y*dir.y);
-
-        //initialise distance 
-        var t = 1e2;
-
-        // cases start with cubic 
-        //when a = c2*c2 == 0
-
-        if(c2*c2<0.01){
-
-            if(2*c2*c1<0.01){
-                //becomes quadratic
-                let a =(2*c2*c0 + c1*c1 - k2);
-                let b = (2*c1*c0 - k1);
-                let c = (c0*c0 - k0);
-
-                let D = b*b - 4*a*c;
-                
-                //we have solutions - two real or one double when
-                if(D>=0){
-                    var t1 = (-b + sqrt(b*b-4*a*c))/(2*a);
-                    var t2 = (-b - sqrt(b*b-4*a*c))/(2*a);
-                    if(t1 > 0) {t = t1;}
-                    if(t2 > 0) {t = min(t,t2);}  
-                }
-            }
-        
-            else{
-                //coefficients for cubic equation
-                
-                let a = 2*c2*c1;
-                let b = (2*c2*c0 + c1*c1 - k2);
-                let c = (2*c1*c0 - k1);
-                let d = (c0*c0 - k0);
-
-                //finding discriminant
-
-                var Q = (3*a*c - b*b)/(9*a*a);
-                var R = (9*a*b*c - 27*a*a*d - 2*b*b*b)/(54*a*a*a);
-                var D = Q*Q*Q + R*R; //discriminant
-
-                //finding real roots
-    
-                if(D<0){
-                    let theta = acos(R/sqrt(-Q*Q*Q));
-                    var t1 = 2*sqrt(-Q)*cos(theta/3) - b/(3*a);
-                    var t2 = 2*sqrt(-Q)*cos(theta/3 + (2*3.14)/3) -b/(3*a);
-                    var t3 = 2*sqrt(-Q)*cos(theta/3 + (4*3.14)/3) - b/(3*a);
-                    if(t1 > 0) {t = t1;}
-                    if(t2 > 0) {t = t2;} 
-                    if(t3 > 0) {t = min(t,t3);} 
-                }
-
-            }
+        if( abs(k3*(k3*k3-k2)+k1) < 0.01 )
+        {
+            po = -1.0;
+            var tmp=k1; k1=k3; k3=tmp;
+            k0 = 1.0/k0;
+            k1 = k1*k0;
+            k2 = k2*k0;
+            k3 = k3*k0;
         }
+        //simplify quartic by subsitution 
+        // p q r for cubic formula (based on cardanos method)
+        var c2 = k2*2.0 - 3.0*k3*k3;
+        var c1 = k3*(k3*k3-k2)+k1;
+        var c0 = k3*(k3*(c2+2.0*k2)-8.0*k1)+4.0*k0;
+        c2 /= 3.0;
+        c1 *= 2.0;
+        c0 /= 3.0;
+        var Q = c2*c2 + c0;
+        var R = c2*c2*c2 - 3.0*c2*c0 + c1*c1;
+        var h = R*R - Q*Q*Q;
 
-        else{
+        //case of the discriminant being equal to zero three real roots,2 are equal
+        //greater than zero one real root for the cubic which we use to find two intersactions
+        if( h>=0.0 )
+        {
+            h = sqrt(h);
+            var v = sign(R+h)*pow(abs(R+h),1.0/3.0); // cube root
+            var u = sign(R-h)*pow(abs(R-h),1.0/3.0); // cube root
+            var s = vec2( (v+u)+4.0*c2, (v-u)*sqrt(3.0));
+            var y = sqrt(0.5*(length(s)+s.x));
+            var x = 0.5*s.y/y;
+            var r = 2.0*c1/(x*x+y*y);
+            var t1 = x - r - k3;
+            var t2 = -x - r - k3;
 
-            //the general case 
-            let a = c2*c2;
-            let b = 2*c1*c2;
-            let c = (2*c2*c0 + c1*c1 - k2);
-            let d = (2*c1*c0 - k1);
-            let e = (c0*c0 - k0);
-
-            let p = (8*a*c - 3*b*b)/(8*a*a);
-            let q = (b*b*b - 4*a*b*c + 8*a*a*d)/(8*a*a*a);
-            let r = (16*a*b*b*c - 64*a*a*b*d - 3*b*b*b*b + 256*a*a*a*e)/(256*a*a*a*a);
-
-            // the four possible cases of quartic equations with multiple roots
-            if(q ==0 && p==0 && r == 0){
-                if(-b/(4*a)>0){
-                    t = -b/(4*a);
-                }
+            if (po < 0.0) {
+                t1 = 2.0 / t1;
+                t2 = 2.0 / t2;
             }
-
-            else if(p == sqrt(-12*r) && p>0 && -8*p*p*p>0 && 27*q*q==-8*p*p*p){
-                if(q>0){
-                  var t1 = sqrt(-p/6) - b/(4*a);
-                  var t2 = -sqrt(-3*p/2) - b/(4*a);
-                  if(t1 > 0) {t = t1;}
-                  if(t2 > 0) {t = min(t,t2);}  
-                }
-                else {
-                    var t1 = -sqrt(-p/6) - b/(4*a);
-                    var t2 = sqrt(-3*p/2) - b/(4*a);
-                    if(t1 > 0) {t = t1;}
-                    if(t2 > 0) {t = min(t,t2);}  
-                }
-
-            }
-
-            else if(4*r>0 && p*p == 4*r && p*p ==q){
-                var t1 = sqrt(-p/2) - b/(4*a);
-                var t2 = -sqrt(-p/2) - b/(4*a);
-                if(t1 > 0) {t = t1;}
-                if(t2 > 0) {t = min(t,t2);}  
-            }
-
-            else if(p!=q && q == r && r==0){
-                var t1 = -b/(4*a);
-                var t2 = sqrt(-p) - b/(4*a);
-                var t3 = -sqrt(-p) - b/(4*a);
-                if(t1 > 0) {t = t1;}
-                if(t2 > 0) {t = t2;} 
-                if(t3 > 0) {t = min(t,t3);} 
-            }
-
-     
-        }
-
-        if((t>ray.tmin) & (t<ray.tmax)){
+            var t = 1e20;
+            if( t1>0.0 ) {t=t1;}
+            if( t2>0.0 ) {t=min(t,t2);}
+            var condition = (t>ray.tmin) & (t<ray.tmax);
+            if(condition){
             (*hit).dist = t;
             let intersection_point = ray.origin + (*hit).dist * ray.direction;
             (*hit).position =intersection_point;
             (*hit).normal = torNormal(intersection_point,tor);
-            (*hit).color = vec3f(0.5,0.2,0.1);
-            return true; 
+            (*hit).color = vec3f(0.8,0.2,0.1);
+            return true; }
+            return false;
         }
-            
+        // case h<0 we have 4 intersections
+        //
+        var sQ = sqrt(Q);
+        var w = sQ*cos( acos(-R/(sQ*Q)) / 3.0 );
+        var d2 = -(w+c2); if( d2<0.0 ) {return false;}
+        var d1 = sqrt(d2);
+        var h1 = sqrt(w - 2.0*c2 + c1/d1);
+        var h2 = sqrt(w - 2.0*c2 - c1/d1);
+        var t1 = -d1 - h1 - k3;
+        if (po < 0.0) {
+            t1 = 2.0 / t1;
+        } else {
+            t1 = t1;
+        }
+
+        var t2 = -d1 + h1 - k3;
+        if (po < 0.0) {
+            t2 = 2.0 / t2;
+        } else {
+            t2 = t2;
+        }
+
+        var t3 = d1 - h2 - k3;
+        if (po < 0.0) {
+            t3 = 2.0 / t3;
+        } else {
+            t3 = t3;
+        }
+
+        var t4 = d1 + h2 - k3;
+        if (po < 0.0) {
+            t4 = 2.0 / t4;
+        } else {
+            t4 = t4;
+        }
+        var t = 1e20;
+        if( t1>0.0 ) {t=t1;}
+        if( t2>0.0 ) {t=min(t,t2);}
+        if( t3>0.0 ) {t=min(t,t3);}
+        if( t4>0.0 ) {t=min(t,t4);}
+        if((t>ray.tmin) & (t<ray.tmax)){
+        (*hit).dist = t;
+        let intersection_point = ray.origin + (*hit).dist * ray.direction;
+        (*hit).position =intersection_point;
+        (*hit).normal = torNormal(intersection_point,tor);
+        return true; }
         return false;
-}
+    }
+
 
 
     fn torNormal(  pos:vec3f, tor:vec2f )->vec3<f32>
@@ -240,6 +215,7 @@
     }
        
     fn torusTextureCoordinates(pos: vec3<f32>, tor: vec2<f32>) -> vec2<f32> {
+        // Example: Use cylindrical coordinates for texture mapping
         let phi = atan2(pos.y, pos.x);
         let theta = acos(clamp(pos.z / tor.x, -1.0, 1.0));
         var u = (phi + 3.14) / (2.0 * 3.14);

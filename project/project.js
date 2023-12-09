@@ -102,7 +102,7 @@ async function main() {
     );
 
     texture.sampler = [];
-    texture.sampler.push(
+    /*texture.sampler.push(
       device.createSampler({
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge",
@@ -110,22 +110,22 @@ async function main() {
         magFilter: "nearest",
       })
     );
-    /*texture.samplers.push(
+    texture.sampler.push(
       device.createSampler({
         addressModeU: "clamp-to-edge",
         addressModeV: "clamp-to-edge",
         minFilter: "linear",
         magFilter: "linear",
       })
-    );
-    texture.samplers.push(
+    );*/
+    texture.sampler.push(
       device.createSampler({
         addressModeU: "repeat",
         addressModeV: "repeat",
         minFilter: "nearest",
         magFilter: "nearest",
       })
-    );
+    );/*
     texture.samplers.push(
       device.createSampler({
         addressModeU: "repeat",
