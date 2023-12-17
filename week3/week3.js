@@ -199,13 +199,22 @@ async function main() {
       ],
     });
     bindGroups.push(bindGroup);
+  
   }
+  
+  addressMenu.addEventListener("click", function () {
+    animate();
+  });
 
+  filterMenu.addEventListener("click",function(){
+    animate();
+  });
   //initialize scene
   animate();
 
   function animate() {
     var address = document.getElementById("addressMenu").value;
+
     var filter = document.getElementById("filterMenu").value;
     console.log("Address: " + address + ", Filter: " + filter);
 
@@ -234,7 +243,7 @@ async function main() {
 
     render(device, context, pipeline, bindGroups[groupNumber],bindGroups2);
   }
-  animate();
+  //animate();
 
   const subdivisionLevelElement = document.getElementById("subdivisionLevel");
   const incrementButton = document.getElementById("incrementButton");
