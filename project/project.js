@@ -45,11 +45,13 @@ async function main() {
   var camera_const = 1.0;
   var aspect_ratio = canvas.width / canvas.height;
   var rotation_angle = 90 * (Math.PI / 180);
+  var texture_enable;
 
   var uniforms = new Float32Array([
     aspect_ratio,
     camera_const,
     rotation_angle,
+    texture_enable,
   ]);
   const uniformBufferSize = 2 * uniforms.byteLength;
   const uniformBuffer = device.createBuffer({
@@ -59,7 +61,6 @@ async function main() {
 
   device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
-  
   async function load_texture(device, filename) {
     const img = document.createElement("img");
     img.src = filename;
@@ -102,38 +103,15 @@ async function main() {
     );
 
     texture.sampler = [];
-    /*texture.sampler.push(
+
+    texture.sampler.push(
       device.createSampler({
-        addressModeU: "clamp-to-edge",
-        addressModeV: "clamp-to-edge",
+        addressModeU: "repeat",
+        addressModeV: "repeat",
         minFilter: "nearest",
         magFilter: "nearest",
       })
     );
-    texture.sampler.push(
-      device.createSampler({
-        addressModeU: "clamp-to-edge",
-        addressModeV: "clamp-to-edge",
-        minFilter: "linear",
-        magFilter: "linear",
-      })
-    );*/
-    texture.sampler.push(
-      device.createSampler({
-        addressModeU: "repeat",
-        addressModeV: "repeat",
-        minFilter: "nearest",
-        magFilter: "nearest",
-      })
-    );/*
-    texture.samplers.push(
-      device.createSampler({
-        addressModeU: "repeat",
-        addressModeV: "repeat",
-        minFilter: "linear",
-        magFilter: "linear",
-      })
-    );*/
 
     return texture;
   }
@@ -149,32 +127,41 @@ async function main() {
     updateBindGroups();
   });
 
+  var button = document.getElementById("Texture");
+  var isTextureEnabled = false; // Initialize to false
+
+  button.addEventListener("click", function () {
+    isTextureEnabled = !isTextureEnabled; // Toggle the state
+    uniforms[3] = isTextureEnabled ? 1 : 0; // Set the value based on the state
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    updateBindGroups();
+  });
+
   async function updateBindGroups() {
     // Clear existing bind groups
-      // Create bind groups based on the pattern flag
-      let texture;
-      if (patternFlag === "checkered") {
-        texture = await load_texture(device, "checkered.jpg");
-      } else if (patternFlag === "geometric") {
-        texture = await load_texture(device, "geometric.jpg");
-      } else if (patternFlag === "waves") {
-        texture = await load_texture(device, "water.jpg");
-      }
-   
-        const bindGroup = device.createBindGroup({
-          layout: pipeline.getBindGroupLayout(0),
-          entries: [
-            { binding: 0, resource: texture.sampler[0] },
-            { binding: 1, resource: texture.createView() },
-            { binding: 2, resource: { buffer: uniformBuffer } },
-          ],
-        });
-        console.log(texture.samplers)
-      
-        render(device, context, pipeline, bindGroup);
+    // Create bind groups based on the pattern flag
+    let texture;
+    if (patternFlag === "checkered") {
+      texture = await load_texture(device, "checkered.jpg");
+    } else if (patternFlag === "geometric") {
+      texture = await load_texture(device, "geometric.jpg");
+    } else if (patternFlag === "waves") {
+      texture = await load_texture(device, "water.jpg");
+    }
+
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: texture.sampler[0] },
+        { binding: 1, resource: texture.createView() },
+        { binding: 2, resource: { buffer: uniformBuffer } },
+      ],
+    });
+    console.log(texture.samplers);
+
+    render(device, context, pipeline, bindGroup);
 
     // Trigger a render with the updated bind groups
-    
   }
 
   // Initial setup
@@ -184,14 +171,13 @@ async function main() {
   // Add an event listener to an input element for rotation_angle
   var rotationAngleInput = document.getElementById("rotationAngle");
   var rotationAngleValue = document.getElementById("rotationAngleValue");
- 
+
   function rotate() {
     rotationAngleInput.addEventListener("input", function (event) {
       // Parse the input value as a float
       const newRotationAngleDegrees = parseFloat(event.target.value);
       // Check if the value is a valid number
-      const newRotationAngleRadians =
-        newRotationAngleDegrees * (Math.PI / 180);
+      const newRotationAngleRadians = newRotationAngleDegrees * (Math.PI / 180);
 
       // Check if the value is a valid number
       if (!isNaN(newRotationAngleRadians)) {
@@ -203,15 +189,12 @@ async function main() {
         // Write the updated array to the uniform buffer
         device.queue.writeBuffer(uniformBuffer, 0, uniforms);
         updateBindGroups();
-       
       }
-      
     });
   }
 
   rotate();
   function render(device, context, pipeline, bindGroup) {
-  
     // Create a render pass in a command buffer and submit it
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
@@ -236,7 +219,4 @@ async function main() {
     pass.end();
     device.queue.submit([encoder.finish()]);
   }
-
-
 }
-
